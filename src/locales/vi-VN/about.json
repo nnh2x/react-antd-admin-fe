@@ -1,0 +1,13 @@
+{
+	"aboutProject": "Giới thiệu dự án",
+	"descriptions": "react-antd-admin là giải pháp quản trị dựa trên React Hooks, Vite và TypeScript. Được thiết kế để giúp bạn nhanh chóng xây dựng các dự án quản trị doanh nghiệp.",
+	"projectMessage": "Thông tin dự án",
+	"version": "Phiên bản",
+	"lastBuildTime": "Thời gian build gần nhất",
+	"license": "Giấy phép",
+	"previewAddress": "Đường dẫn xem trước",
+	"documentAddress": "Đường dẫn tài liệu",
+	"author": "Tác giả",
+	"dependencies": "Dependencies (Production)",
+	"devDependencies": "Dependencies (Development)"
+}

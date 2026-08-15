@@ -1,0 +1,34 @@
+{
+	"newVisits": "Lượt truy cập mới",
+	"messages": "Tin nhắn",
+	"purchases": "Lượt mua",
+	"shoppings": "Đơn hàng",
+
+	"sales": "Doanh số",
+	"thisWeek": "Tuần này",
+	"thisMonth": "Tháng này",
+	"thisYear": "Năm này",
+
+	"monday": "Thứ Hai",
+	"tuesday": "Thứ Ba",
+	"wednesday": "Thứ Tư",
+	"thursday": "Thứ Năm",
+	"friday": "Thứ Sáu",
+	"saturday": "Thứ Bảy",
+	"sunday": "Chủ Nhật",
+	"views": "Lượt xem",
+	"directAccess": "Truy cập trực tiếp",
+	"emailMarketing": "Email Marketing",
+	"affiliateAdvertise": "Affiliate Advertise",
+	"videoAdvertise": "Quảng cáo video",
+
+	"salesCategoryProportion": "Tỷ trọng doanh số theo danh mục",
+	"electronics": "Điện tử",
+	"homeGoods": "Đồ gia dụng",
+	"apparelAccessories": "Trang phục & phụ kiện",
+	"foodBeverages": "Thực phẩm & đồ uống",
+	"beautySkincare": "Làm đẹp & chăm sóc da",
+	"allChannels": "Tất cả kênh",
+	"online": "Online",
+	"site": "Site"
+}

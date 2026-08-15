@@ -1,0 +1,5 @@
+/* Don't use Tailwind's preflight; use antd's reset styles instead to avoid conflicts with antd styles */
+@layer reset, antd;
+
+/* @see https://ant.design/docs/react/compatible-style-cn#resetcss */
+@import url(antd/dist/reset.css) layer(reset);
