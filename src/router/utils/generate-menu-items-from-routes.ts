@@ -40,7 +40,6 @@ export function generateMenuItemsFromRoutes(routeList: AppRouteRecordRaw[]) {
 				),
 		};
 		if (iconName) {
-			menuItem.icon = iconName;
 			if (isString(iconName)) {
 				if (menuIcons[iconName]) {
 					menuItem.icon = createElement(menuIcons[iconName]);
@@ -50,6 +49,9 @@ export function generateMenuItemsFromRoutes(routeList: AppRouteRecordRaw[]) {
 						`menu-icon: icon "${iconName}" not found in src/icons/menu-icons.ts file`,
 					);
 				}
+			}
+			else {
+				menuItem.icon = iconName;
 			}
 		}
 		if (Array.isArray(item.children) && item.children.length > 0) {

@@ -1,10 +1,12 @@
-import type { ParamsType, ProTable, ProTableProps } from "@ant-design/pro-components";
+import type { ParamsType, ProColumns, ProTable, ProTableProps } from "@ant-design/pro-components";
 
 import type { TablePaginationConfig } from "antd";
+import type { ThHTMLAttributes } from "react";
 
 import { LoadingOutlined } from "@ant-design/icons";
 import { DragSortTable } from "@ant-design/pro-components";
-import { useSize } from "ahooks";
+import { useDebounceFn, useSize } from "ahooks";
+import { Input } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "react-i18next";
@@ -18,7 +20,32 @@ import { useStyles } from "./styles";
 
 const Table = DragSortTable as typeof ProTable;
 
-export interface BasicTableProps<D, U, V> extends ProTableProps<D, U, V> {
+/** Minimum width (px) a column can be resized down to. */
+const MIN_COLUMN_WIDTH = 60;
+
+export interface BasicTableHeaderSearchConfig {
+	/** Input placeholder. Defaults to the `common.search` translation. */
+	placeholder?: string
+	/** Debounce delay (ms) before the value is committed and merged into the request params. Default `400`. */
+	debounce?: number
+	/** Render a custom search control instead of the default `Input`. */
+	render?: (value: string, onChange: (value: string) => void) => React.ReactNode
+}
+
+export type BasicTableColumn<D, V = "text"> = ProColumns<D, V> & {
+	/**
+	 * Render a search input under this column's header title. The captured value is merged into the
+	 * table's request `params` (keyed by the column's `key`/`dataIndex`), so it reaches your `request` call.
+	 *
+	 * This is independent from ProTable's built-in `search` field, which controls the collapsible search
+	 * form rendered above the table.
+	 */
+	headerSearch?: boolean | BasicTableHeaderSearchConfig
+	/** Whether this column's width can be dragged to resize. Falls back to the table-level `resizable` prop. */
+	resizable?: boolean
+};
+
+export interface BasicTableProps<D, U, V = "text"> extends Omit<ProTableProps<D, U, V>, "columns"> {
 	/**
 	 * @description Adapt to the content area height. If scroll.y is set, this adaptation is skipped
 	 * @default false
@@ -31,6 +58,134 @@ export interface BasicTableProps<D, U, V> extends ProTableProps<D, U, V> {
 	dragSortKey?: string
 	/** Called with the reordered data after a row is dropped. */
 	onDragSortEnd?: (beforeIndex: number, afterIndex: number, dataSource: D[]) => Promise<void> | void
+	/**
+	 * Table-wide switch for column width resizing (drag the column border).
+	 * Can be disabled per-column via `column.resizable`.
+	 * @default true
+	 */
+	resizable?: boolean
+	columns?: BasicTableColumn<D, V>[]
+	/**
+	 * Called whenever any column's header search value changes, with the full map of active values
+	 * keyed by column `key`/`dataIndex`. These values are also merged into the table's request `params`.
+	 */
+	onHeaderSearchChange?: (values: Record<string, string>) => void
+}
+
+function getColumnKey(column: BasicTableColumn<any, any>): string {
+	if (!isUndefined(column.key)) {
+		return String(column.key);
+	}
+	if (Array.isArray(column.dataIndex)) {
+		return column.dataIndex.join(".");
+	}
+	if (!isUndefined(column.dataIndex)) {
+		return String(column.dataIndex);
+	}
+	return "";
+}
+
+interface ResizableTitleProps extends ThHTMLAttributes<HTMLTableCellElement> {
+	width?: number
+	resizable?: boolean
+	onResize?: (width: number) => void
+}
+
+/** Header `<th>` replacement that adds a drag handle on its right edge to resize the column. */
+function ResizableTitle(props: ResizableTitleProps) {
+	const { width, resizable, onResize, style, className, children, ...restProps } = props;
+	const startXRef = useRef(0);
+	const startWidthRef = useRef(0);
+	const [dragging, setDragging] = useState(false);
+
+	const handleMouseMove = useCallback((event: MouseEvent) => {
+		const delta = event.clientX - startXRef.current;
+		onResize?.(Math.max(startWidthRef.current + delta, MIN_COLUMN_WIDTH));
+	}, [onResize]);
+
+	const handleMouseUp = useCallback(() => {
+		setDragging(false);
+		document.removeEventListener("mousemove", handleMouseMove);
+		document.removeEventListener("mouseup", handleMouseUp);
+	}, [handleMouseMove]);
+
+	useEffect(() => () => {
+		document.removeEventListener("mousemove", handleMouseMove);
+		document.removeEventListener("mouseup", handleMouseUp);
+	}, [handleMouseMove, handleMouseUp]);
+
+	if (!resizable || !width) {
+		return <th className={className} style={style} {...restProps}>{children}</th>;
+	}
+
+	const handleMouseDown = (event: React.MouseEvent<HTMLSpanElement>) => {
+		event.stopPropagation();
+		event.preventDefault();
+		startXRef.current = event.clientX;
+		startWidthRef.current = width;
+		setDragging(true);
+		document.addEventListener("mousemove", handleMouseMove);
+		document.addEventListener("mouseup", handleMouseUp);
+	};
+
+	return (
+		<th className={cn(className, "relative")} style={style} {...restProps}>
+			{children}
+			<span
+				className={cn(
+					"absolute inset-y-0 right-0 z-10 w-2 -mr-1 cursor-col-resize touch-none select-none",
+					dragging && "bg-gray-400/60 dark:bg-gray-300/40",
+				)}
+				onMouseDown={handleMouseDown}
+				onClick={event => event.stopPropagation()}
+			/>
+		</th>
+	);
+}
+
+interface HeaderSearchInputProps {
+	value?: string
+	config?: BasicTableHeaderSearchConfig
+	placeholder: string
+	onChange: (value: string | undefined) => void
+}
+
+/** Debounced search input rendered under a column's header title. */
+function HeaderSearchInput(props: HeaderSearchInputProps) {
+	const { value, config, placeholder, onChange } = props;
+	const [prevValue, setPrevValue] = useState(value);
+	const [innerValue, setInnerValue] = useState(value ?? "");
+
+	// Reset the local draft when the external value changes (e.g. cleared elsewhere), without an effect.
+	if (value !== prevValue) {
+		setPrevValue(value);
+		setInnerValue(value ?? "");
+	}
+
+	const { run: commitChange } = useDebounceFn(
+		(nextValue: string) => onChange(nextValue || undefined),
+		{ wait: config?.debounce ?? 400 },
+	);
+
+	const handleChange = (nextValue: string) => {
+		setInnerValue(nextValue);
+		commitChange(nextValue);
+	};
+
+	if (config?.render) {
+		return config.render(innerValue, handleChange);
+	}
+
+	return (
+		<Input
+			size="small"
+			allowClear
+			value={innerValue}
+			placeholder={config?.placeholder ?? placeholder}
+			onClick={event => event.stopPropagation()}
+			onChange={event => handleChange(event.target.value)}
+		/>
+	);
 }
 
 export function BasicTable<
@@ -42,7 +197,7 @@ export function BasicTable<
 ) {
 	const classes = useStyles();
 	const { t } = useTranslation();
-	const { adaptive } = props;
+	const { adaptive, resizable = true, onHeaderSearchChange } = props;
 	const tableWrapperRef = useRef<HTMLDivElement>(null);
 	const size = useSize(tableWrapperRef);
 	const {
@@ -54,6 +209,10 @@ export function BasicTable<
 	 * @see https://gist.github.com/condorheroblog/557c18c61084a1296b716bcb1203315e
 	 */
 	const [scrollY, setScrollY] = useState<number | string | undefined>(adaptive ? "initial" : undefined);
+	/** User-adjusted column widths, keyed by column `key`/`dataIndex`. */
+	const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+	/** Active per-column header search values, keyed by column `key`/`dataIndex`. */
+	const [headerSearchValues, setHeaderSearchValues] = useState<Record<string, string>>({});
 
 	/**
 	 * @description Fixed footer height
@@ -165,6 +324,95 @@ export function BasicTable<
 		};
 	};
 
+	const handleHeaderSearchChange = useCallback((key: string, value: string | undefined) => {
+		setHeaderSearchValues((prev) => {
+			if (isUndefined(value) || value === "") {
+				if (!(key in prev))
+					return prev;
+				const next = { ...prev };
+				delete next[key];
+				return next;
+			}
+			if (prev[key] === value)
+				return prev;
+			return { ...prev, [key]: value };
+		});
+	}, []);
+
+	useEffect(() => {
+		onHeaderSearchChange?.(headerSearchValues);
+	}, [headerSearchValues, onHeaderSearchChange]);
+
+	/** Recursively merges resize + header-search behavior into the caller's columns. */
+	const mergeColumns = useCallback((columns: BasicTableColumn<DataType, ValueType>[]): ProColumns<DataType, ValueType>[] => {
+		return columns.map((column) => {
+			const children = column.children
+				? mergeColumns(column.children as BasicTableColumn<DataType, ValueType>[])
+				: undefined;
+
+			const key = getColumnKey(column);
+			if (!key) {
+				return { ...column, children } as ProColumns<DataType, ValueType>;
+			}
+
+			const columnResizable = resizable && column.resizable !== false;
+			const width = columnWidths[key] ?? column.width;
+			const originalTitle = column.title;
+
+			const nextColumn = {
+				...column,
+				children,
+				width,
+				onHeaderCell: (col: any) => ({
+					...column.onHeaderCell?.(col),
+					width,
+					resizable: columnResizable,
+					onResize: (nextWidth: number) => {
+						setColumnWidths(prev => ({ ...prev, [key]: nextWidth }));
+					},
+				}),
+			} as ProColumns<DataType, ValueType>;
+
+			if (column.headerSearch) {
+				const searchConfig = isObject(column.headerSearch) ? column.headerSearch : undefined;
+				nextColumn.title = ((...args: any[]) => {
+					const titleNode = typeof originalTitle === "function" ? (originalTitle as (...args: any[]) => React.ReactNode)(...args) : originalTitle;
+					return (
+						<div className="flex flex-col gap-1">
+							<div>{titleNode}</div>
+							<HeaderSearchInput
+								value={headerSearchValues[key]}
+								config={searchConfig}
+								placeholder={t("common.search")}
+								onChange={value => handleHeaderSearchChange(key, value)}
+							/>
+						</div>
+					);
+				}) as typeof nextColumn.title;
+			}
+
+			return nextColumn;
+		});
+	}, [resizable, columnWidths, headerSearchValues, t, handleHeaderSearchChange]);
+
+	const mergedColumns = useMemo(
+		() => (props.columns ? mergeColumns(props.columns) : props.columns),
+		[props.columns, mergeColumns],
+	);
+
+	const mergedComponents = useMemo(() => ({
+		...props.components,
+		header: {
+			...props.components?.header,
+			cell: ResizableTitle,
+		},
+	}), [props.components]);
+
+	const mergedParams = useMemo(
+		() => ({ ...props.params, ...headerSearchValues }) as Params,
+		[props.params, headerSearchValues],
+	);
+
 	return (
 		<div className="h-full" ref={tableWrapperRef}>
 			<Table<DataType, Params, ValueType>
@@ -181,6 +429,9 @@ export function BasicTable<
 				scroll={{ y: scrollY, x: "max-content", ...props.scroll }}
 				loading={getLoadingProps()}
 				pagination={getPaginationProps()}
+				columns={mergedColumns}
+				components={mergedComponents}
+				params={mergedParams}
 				expandable={{
 					// expandIcon: ({ expanded, onExpand, record }) => {
 					// 	return expanded

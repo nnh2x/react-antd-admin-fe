@@ -59,6 +59,7 @@ Production sử dụng hash router, được cấu hình trong `.env.production`
 | `yarn dev` | Khởi động dev server |
 | `yarn build` | Build production vào thư mục `build/` |
 | `yarn preview` | Xem thử bản production build |
+| `yarn gen <feature>` | Sinh nhanh feature hoàn chỉnh theo tên và options |
 | `yarn generate:crud` | Sinh nhanh module bảng/search/thêm/sửa/chi tiết/xóa |
 | `yarn typecheck` | Kiểm tra TypeScript |
 | `yarn lint` | Kiểm tra ESLint |
@@ -67,7 +68,7 @@ Production sử dụng hash router, được cấu hình trong `.env.production`
 | `yarn check:circular-deps` | Kiểm tra circular dependency |
 | `yarn analyzer` | Phân tích kích thước bundle |
 
-Chi tiết schema và các chế độ chạy của CLI xem tại [`scripts/crud-generator/README.md`](scripts/crud-generator/README.md).
+Tạo feature nhanh bằng `yarn gen product --title="Sản phẩm"`. Chi tiết schema CRUD và chế độ tùy biến field xem tại [`scripts/crud-generator/README.md`](scripts/crud-generator/README.md).
 
 ## Cấu trúc thư mục
 

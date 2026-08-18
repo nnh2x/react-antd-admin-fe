@@ -38,6 +38,7 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 			title: t("common.status"),
 			dataIndex: "status",
 			valueType: "select",
+			search: true,
 			width: 80,
 			render: (text, record) => {
 				return <Tag color={record.status === 1 ? "success" : "default"}>{text}</Tag>;

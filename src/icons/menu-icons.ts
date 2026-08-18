@@ -1,5 +1,6 @@
 import {
 	ApartmentOutlined,
+	AppstoreOutlined,
 	CloudOutlined,
 	ContainerOutlined,
 	CopyrightOutlined,
@@ -23,6 +24,7 @@ import { RiAccountCircleLine, RiUserSettingsLine } from "./ri";
  * Icons used in the menu.
  */
 export const menuIcons: Record<string, any> = {
+	AppstoreOutlined,
 	HomeOutlined,
 	SafetyOutlined,
 	CloudOutlined,

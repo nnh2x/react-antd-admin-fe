@@ -55,7 +55,7 @@ export default function Role() {
 			dataIndex: "sort",
 			title: "",
 			width: 48,
-			search: false,
+			search: true,
 			disable: true,
 			fixed: "left",
 			render: () => null,
