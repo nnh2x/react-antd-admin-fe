@@ -1,0 +1,96 @@
+{
+	"name": "product",
+	"module": "catalog",
+	"title": "Sản phẩm",
+	"endpoint": "products",
+	"idField": "id",
+	"idType": "number",
+	"fields": [
+		{
+			"name": "code",
+			"label": "Mã sản phẩm",
+			"type": "text",
+			"required": true,
+			"table": true,
+			"search": true,
+			"form": true,
+			"detail": true
+		},
+		{
+			"name": "name",
+			"label": "Tên sản phẩm",
+			"type": "text",
+			"required": true,
+			"table": true,
+			"search": true,
+			"form": true,
+			"detail": true
+		},
+		{
+			"name": "price",
+			"label": "Đơn giá",
+			"type": "number",
+			"required": true,
+			"table": true,
+			"search": false,
+			"form": true,
+			"detail": true
+		},
+		{
+			"name": "status",
+			"label": "Trạng thái",
+			"type": "select",
+			"required": true,
+			"table": true,
+			"search": true,
+			"form": true,
+			"detail": true,
+			"initialValue": 1,
+			"options": [
+				{ "label": "Hoạt động", "value": 1 },
+				{ "label": "Ngừng hoạt động", "value": 0 }
+			]
+		},
+		{
+			"name": "description",
+			"label": "Mô tả",
+			"type": "textarea",
+			"required": false,
+			"table": false,
+			"search": false,
+			"form": true,
+			"detail": true
+		},
+		{
+			"name": "featured",
+			"label": "Sản phẩm nổi bật",
+			"type": "boolean",
+			"required": false,
+			"table": true,
+			"search": false,
+			"form": true,
+			"detail": true,
+			"initialValue": false
+		},
+		{
+			"name": "availableFrom",
+			"label": "Ngày mở bán",
+			"type": "date",
+			"required": false,
+			"table": true,
+			"search": false,
+			"form": true,
+			"detail": true
+		},
+		{
+			"name": "createdAt",
+			"label": "Ngày tạo",
+			"type": "datetime",
+			"required": false,
+			"table": true,
+			"search": false,
+			"form": false,
+			"detail": true
+		}
+	]
+}
