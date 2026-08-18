@@ -22,6 +22,7 @@
 		"dev": "vite --host",
 		"build": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
 		"preview": "vite preview",
+		"generate:crud": "node scripts/crud-generator/index.mjs",
 		"typecheck": "tsc --noEmit",
 		"analyzer": "vite-bundle-visualizer --output analyzer/stats.html",
 		"eslint-config-inspector": "eslint-config-inspector",
