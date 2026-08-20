@@ -8328,7 +8328,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prop-types@npm:^15.5.8, prop-types@npm:^15.6.0, prop-types@npm:^15.8.1":
+"prop-types@npm:15.x, prop-types@npm:^15.5.8, prop-types@npm:^15.6.0, prop-types@npm:^15.8.1":
   version: 15.8.1
   resolution: "prop-types@npm:15.8.1"
   dependencies:
@@ -8465,6 +8465,7 @@ __metadata:
     react-error-boundary: "npm:^6.1.1"
     react-i18next: "npm:^17.0.8"
     react-jss: "npm:^10.10.0"
+    react-resizable: "npm:^4.0.2"
     react-router: "npm:^7.15.1"
     simple-git-hooks: "npm:^2.13.1"
     simplebar-react: "npm:^3.3.2"
@@ -8609,6 +8610,19 @@ __metadata:
   peerDependencies:
     react: ">=16.8.6"
   checksum: 10c0/38234c362fb21cac318e2be83840c8dd5a75a5689ee96d732997cc88c7775032d51d6186232a022c8b74c80c8d1ab943b0f984831a0e9c46357c75da919c66a6
+  languageName: node
+  linkType: hard
+
+"react-resizable@npm:^4.0.2":
+  version: 4.0.2
+  resolution: "react-resizable@npm:4.0.2"
+  dependencies:
+    prop-types: "npm:15.x"
+    react-draggable: "npm:^4.5.0"
+  peerDependencies:
+    react: ">= 16.3"
+    react-dom: ">= 16.3"
+  checksum: 10c0/e8a47ee5c9c8c308a88c1eb79194574aa4d0d745ced95c29e4ebe72db3011d77fc238fee9691e2a52eff9d1f5b3424a757548a93217355056954645ae67fc266
   languageName: node
   linkType: hard
 

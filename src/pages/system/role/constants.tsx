@@ -16,7 +16,6 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 			title: t("system.role.name"),
 			dataIndex: "name",
 			ellipsis: true,
-			width: 120,
 			formItemProps: {
 				rules: [
 					{
@@ -55,13 +54,16 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 		{
 			title: t("common.remark"),
 			dataIndex: "remark",
+			width: 220,
+			ellipsis: true,
 			search: false,
 		},
 		{
 			title: t("common.createTime"),
 			dataIndex: "createTime",
 			valueType: "date",
-			width: 100,
+			width: 220,
+			ellipsis: true,
 			search: false,
 		},
 		{

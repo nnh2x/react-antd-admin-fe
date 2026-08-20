@@ -2,6 +2,7 @@ import type { ParamsType, ProColumns, ProTable, ProTableProps } from "@ant-desig
 
 import type { TablePaginationConfig } from "antd";
 import type { ThHTMLAttributes } from "react";
+import type { ResizeCallbackData } from "react-resizable";
 
 import { LoadingOutlined } from "@ant-design/icons";
 import { DragSortTable } from "@ant-design/pro-components";
@@ -10,6 +11,8 @@ import { Input } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "react-i18next";
+import { Resizable } from "react-resizable";
+import { useLocation } from "react-router";
 import { footerHeight as layoutFooterHeight } from "#src/layout/constants";
 import { usePreferencesStore } from "#src/store/preferences";
 import { cn } from "#src/utils/cn";
@@ -22,6 +25,10 @@ const Table = DragSortTable as typeof ProTable;
 
 /** Minimum width (px) a column can be resized down to. */
 const MIN_COLUMN_WIDTH = 60;
+/** Width (px) given to a resizable column that doesn't declare its own `width`. */
+const DEFAULT_COLUMN_WIDTH = 150;
+/** localStorage/sessionStorage key prefix for auto-persisted column widths, namespaced per route. */
+const WIDTHS_STORAGE_PREFIX = "basic-table-widths:";
 
 export interface BasicTableHeaderSearchConfig {
 	/** Input placeholder. Defaults to the `common.search` translation. */
@@ -91,55 +98,78 @@ interface ResizableTitleProps extends ThHTMLAttributes<HTMLTableCellElement> {
 	onResize?: (width: number) => void
 }
 
-/** Header `<th>` replacement that adds a drag handle on its right edge to resize the column. */
+/**
+ * Header `<th>` replacement that wraps the cell in `react-resizable`'s `Resizable` so its right
+ * edge can be dragged to resize the column. `width` must be a concrete number for this to attach
+ * (see `DEFAULT_COLUMN_WIDTH` in `mergeColumns`, which guarantees one for every resizable column).
+ */
 function ResizableTitle(props: ResizableTitleProps) {
-	const { width, resizable, onResize, style, className, children, ...restProps } = props;
-	const startXRef = useRef(0);
-	const startWidthRef = useRef(0);
+	const { width, resizable, onResize, className, ...restProps } = props;
 	const [dragging, setDragging] = useState(false);
-
-	const handleMouseMove = useCallback((event: MouseEvent) => {
-		const delta = event.clientX - startXRef.current;
-		onResize?.(Math.max(startWidthRef.current + delta, MIN_COLUMN_WIDTH));
-	}, [onResize]);
-
-	const handleMouseUp = useCallback(() => {
-		setDragging(false);
-		document.removeEventListener("mousemove", handleMouseMove);
-		document.removeEventListener("mouseup", handleMouseUp);
-	}, [handleMouseMove]);
-
-	useEffect(() => () => {
-		document.removeEventListener("mousemove", handleMouseMove);
-		document.removeEventListener("mouseup", handleMouseUp);
-	}, [handleMouseMove, handleMouseUp]);
+	// Offset (px) of the live drag position from the column's committed width, used only to move
+	// the ghost line — never fed back into React state mid-drag (see handleResizeStop for why).
+	const [liveOffset, setLiveOffset] = useState(0);
+	const latestWidthRef = useRef<number>(width ?? MIN_COLUMN_WIDTH);
 
 	if (!resizable || !width) {
-		return <th className={className} style={style} {...restProps}>{children}</th>;
+		return <th className={className} {...restProps} />;
 	}
 
-	const handleMouseDown = (event: React.MouseEvent<HTMLSpanElement>) => {
-		event.stopPropagation();
-		event.preventDefault();
-		startXRef.current = event.clientX;
-		startWidthRef.current = width;
-		setDragging(true);
-		document.addEventListener("mousemove", handleMouseMove);
-		document.addEventListener("mouseup", handleMouseUp);
+	// Every column's width lives in the parent's `columnWidths` state, so committing on each
+	// `onResize` tick would re-render (and, several layers down, remount) the whole header row on
+	// every pixel of mouse movement — which tears down the in-flight drag after the very first
+	// tick. Instead only the ghost line (local state, contained to this cell) tracks the live
+	// drag; the real width is committed once, in `handleResizeStop`.
+	const handleResize = (_event: React.SyntheticEvent, data: ResizeCallbackData) => {
+		const nextWidth = Math.round(data.size.width);
+		latestWidthRef.current = nextWidth;
+		setLiveOffset(nextWidth - width);
+	};
+
+	const handleResizeStop = () => {
+		setDragging(false);
+		setLiveOffset(0);
+		if (latestWidthRef.current !== width) {
+			onResize?.(latestWidthRef.current);
+		}
 	};
 
 	return (
-		<th className={cn(className, "relative")} style={style} {...restProps}>
-			{children}
-			<span
-				className={cn(
-					"absolute inset-y-0 right-0 z-10 w-2 -mr-1 cursor-col-resize touch-none select-none",
-					dragging && "bg-gray-400/60 dark:bg-gray-300/40",
-				)}
-				onMouseDown={handleMouseDown}
-				onClick={event => event.stopPropagation()}
-			/>
-		</th>
+		<Resizable
+			width={width}
+			height={0}
+			axis="x"
+			resizeHandles={["e"]}
+			minConstraints={[MIN_COLUMN_WIDTH, 0]}
+			draggableOpts={{ enableUserSelectHack: false }}
+			onResizeStart={() => {
+				latestWidthRef.current = width;
+				setDragging(true);
+			}}
+			onResizeStop={handleResizeStop}
+			onResize={handleResize}
+			handle={(_handleAxis, ref) => (
+				<span
+					ref={ref}
+					// Hit target is wider than the visible line (20px, centered on the border) so it's
+					// easy to land the cursor on; the thin bar inside only lights up on hover/drag so
+					// hovering near the border gives immediate visual confirmation you're over it.
+					className="group absolute inset-y-0 -right-2.5 z-30 w-5 cursor-col-resize touch-none select-none"
+					onClick={event => event.stopPropagation()}
+				>
+					<span
+						style={dragging ? { transform: `translateX(${liveOffset}px)` } : undefined}
+						className={cn(
+							"absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-transparent transition-colors",
+							"group-hover:bg-blue-400/70 dark:group-hover:bg-blue-300/60",
+							dragging && "bg-blue-500 dark:bg-blue-400",
+						)}
+					/>
+				</span>
+			)}
+		>
+			<th className={cn(className, "relative")} {...restProps} />
+		</Resizable>
 	);
 }
 
@@ -197,6 +227,7 @@ export function BasicTable<
 ) {
 	const classes = useStyles();
 	const { t } = useTranslation();
+	const location = useLocation();
 	const { adaptive, resizable = true, onHeaderSearchChange } = props;
 	const tableWrapperRef = useRef<HTMLDivElement>(null);
 	const size = useSize(tableWrapperRef);
@@ -209,8 +240,31 @@ export function BasicTable<
 	 * @see https://gist.github.com/condorheroblog/557c18c61084a1296b716bcb1203315e
 	 */
 	const [scrollY, setScrollY] = useState<number | string | undefined>(adaptive ? "initial" : undefined);
+	// Resized widths auto-persist per screen — keyed by the current route by default, so every page
+	// keeps its own widths without needing any config. Pass `columnsState.persistenceKey` (already
+	// used to persist show/hide/order) to pin the key explicitly instead, e.g. for multiple tables
+	// on one route.
+	const widthsStorageKey = `${WIDTHS_STORAGE_PREFIX}${props.columnsState?.persistenceKey ?? location.pathname}`;
+	const widthsStorage = props.columnsState?.persistenceType === "sessionStorage" ? sessionStorage : localStorage;
 	/** User-adjusted column widths, keyed by column `key`/`dataIndex`. */
-	const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+	const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+		try {
+			const raw = widthsStorage.getItem(widthsStorageKey);
+			return raw ? JSON.parse(raw) : {};
+		}
+		catch {
+			return {};
+		}
+	});
+
+	useEffect(() => {
+		try {
+			widthsStorage.setItem(widthsStorageKey, JSON.stringify(columnWidths));
+		}
+		catch {
+			// Storage full or unavailable (e.g. private browsing) — resizing still works, it just won't persist.
+		}
+	}, [columnWidths, widthsStorageKey, widthsStorage]);
 	/** Active per-column header search values, keyed by column `key`/`dataIndex`. */
 	const [headerSearchValues, setHeaderSearchValues] = useState<Record<string, string>>({});
 
@@ -225,7 +279,10 @@ export function BasicTable<
 		return 0;
 	}, [enableFooter, fixedFooter]);
 
-	const getPaginationProps = useCallback(() => {
+	// Memoized for the same reason as `loadingProps` below: a fresh object on every render (even
+	// with identical content) was enough to make antd/rc-table treat the header row as changed and
+	// remount it.
+	const paginationProps = useMemo(() => {
 		if (props.pagination === false) {
 			return false;
 		}
@@ -248,7 +305,6 @@ export function BasicTable<
 	 * The pagination height cannot be calculated by reading the DOM, because pagination is a child component and the parent cannot access it before it has loaded
 	 */
 	const paginationHeight = useMemo(() => {
-		const paginationProps = getPaginationProps();
 		const isPaginationDisabled = paginationProps === false;
 		if (isPaginationDisabled) {
 			return 0;
@@ -263,7 +319,7 @@ export function BasicTable<
 				return 24 + 16 + 16;
 			}
 		}
-	}, [getPaginationProps]);
+	}, [paginationProps]);
 
 	/**
 	 * @description Table height adaptation
@@ -311,7 +367,10 @@ export function BasicTable<
 		}
 	}, [size, adaptive, paginationHeight, footerHeight, props.scroll?.y]);
 
-	const getLoadingProps = () => {
+	// Memoized so the `loading` prop we hand to `<Table>` keeps a stable reference across renders
+	// that don't actually change `props.loading` (a fresh object here on every render was enough to
+	// make antd/rc-table treat the whole header row as changed and remount it).
+	const loadingProps = useMemo(() => {
 		if (props.loading === false) {
 			return false;
 		}
@@ -322,7 +381,7 @@ export function BasicTable<
 			indicator: <LoadingOutlined spin />,
 			...props.loading,
 		};
-	};
+	}, [props.loading]);
 
 	const handleHeaderSearchChange = useCallback((key: string, value: string | undefined) => {
 		setHeaderSearchValues((prev) => {
@@ -343,6 +402,13 @@ export function BasicTable<
 		onHeaderSearchChange?.(headerSearchValues);
 	}, [headerSearchValues, onHeaderSearchChange]);
 
+	// Read via ref (not the `mergeColumns` dependency array) inside the title closure below, so
+	// typing in a header-search box doesn't force every column to be rebuilt on each debounced
+	// commit — antd/rc-table remounts the whole header row whenever the `columns` array it's given
+	// changes identity, which would otherwise blow away input focus after every commit.
+	const headerSearchValuesRef = useRef(headerSearchValues);
+	headerSearchValuesRef.current = headerSearchValues;
+
 	/** Recursively merges resize + header-search behavior into the caller's columns. */
 	const mergeColumns = useCallback((columns: BasicTableColumn<DataType, ValueType>[]): ProColumns<DataType, ValueType>[] => {
 		return columns.map((column) => {
@@ -356,7 +422,9 @@ export function BasicTable<
 			}
 
 			const columnResizable = resizable && column.resizable !== false;
-			const width = columnWidths[key] ?? column.width;
+			// Resizing needs a concrete pixel width to drag from, so resizable columns that don't
+			// declare one fall back to a default instead of staying content-sized.
+			const width = columnWidths[key] ?? column.width ?? (columnResizable ? DEFAULT_COLUMN_WIDTH : undefined);
 			const originalTitle = column.title;
 
 			const nextColumn = {
@@ -381,7 +449,7 @@ export function BasicTable<
 						<div className="flex flex-col gap-1">
 							<div>{titleNode}</div>
 							<HeaderSearchInput
-								value={headerSearchValues[key]}
+								value={headerSearchValuesRef.current[key]}
 								config={searchConfig}
 								placeholder={t("common.search")}
 								onChange={value => handleHeaderSearchChange(key, value)}
@@ -393,7 +461,7 @@ export function BasicTable<
 
 			return nextColumn;
 		});
-	}, [resizable, columnWidths, headerSearchValues, t, handleHeaderSearchChange]);
+	}, [resizable, columnWidths, t, handleHeaderSearchChange]);
 
 	const mergedColumns = useMemo(
 		() => (props.columns ? mergeColumns(props.columns) : props.columns),
@@ -419,6 +487,7 @@ export function BasicTable<
 				cardBordered
 				rowKey="id"
 				dateFormatter="string"
+				tableLayout="fixed"
 				{...props}
 				options={{
 					fullScreen: true,
@@ -427,8 +496,8 @@ export function BasicTable<
 				rootClassName={cn(BASIC_TABLE_ROOT_CLASS_NAME, props.rootClassName)}
 				className={cn(classes.basicTable, props.className)}
 				scroll={{ y: scrollY, x: "max-content", ...props.scroll }}
-				loading={getLoadingProps()}
-				pagination={getPaginationProps()}
+				loading={loadingProps}
+				pagination={paginationProps}
 				columns={mergedColumns}
 				components={mergedComponents}
 				params={mergedParams}
