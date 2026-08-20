@@ -17,7 +17,7 @@ export const DEFAULT_PREFERENCES = {
 	enableBackTopButton: true,
 	pageLayout: "layout-right",
 	enableBackendAccess: true,
-	enableFrontendAceess: false,
+	enableFrontendAceess: true,
 	language: "vi-VN",
 	enableDynamicTitle: true,
 	enableCheckUpdates: true,
@@ -140,6 +140,16 @@ export const usePreferencesStore = create<
 				});
 			},
 		}),
-		{ name: getAppNamespace("preferences") },
+		{
+			name: getAppNamespace("preferences"),
+			version: 1,
+			migrate: (persistedState) => {
+				const preferences = persistedState as Partial<PreferencesState>;
+				return {
+					...preferences,
+					enableFrontendAceess: true,
+				};
+			},
+		},
 	),
 );

@@ -56,6 +56,7 @@ export default function Role() {
 			title: "",
 			width: 48,
 			search: false,
+			ellipsis: true,
 			disable: true,
 			fixed: "left",
 			render: () => null,
