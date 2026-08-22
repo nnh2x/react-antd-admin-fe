@@ -8,5 +8,3 @@ export const home = 1;
 
 export const exception = 90;
 export const system = 100;
-export const personalCenter = 110;
-export const about = 120;

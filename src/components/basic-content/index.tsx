@@ -14,7 +14,7 @@ export function BasicContent(props: Props) {
 			id="basic-content"
 			/**
 			 * 1. When the children's height is too tall and the p-4 style is set, h-full must not be set, to prevent the bottom padding-bottom from disappearing.
-			 * See src/pages/about/index.tsx
+			 * See src/pages/home/index.tsx
 			 *
 			 * 2. If you need the children's height to be less than or equal to basic-content, use h-full
 			 * See src/pages/system/role/index.tsx

@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { BasicButton } from "#src/components/basic-button";
 
-import { RiAccountCircleLine } from "#src/icons";
 import { loginPath } from "#src/router/extra-info";
 import { useAuthStore } from "#src/store/auth";
 import { useUserStore } from "#src/store/user";
@@ -26,19 +25,10 @@ export function UserMenu({ ...restProps }: ButtonProps) {
 			await logout();
 			navigate(loginPath);
 		}
-		if (key === "personal-center") {
-			navigate("/personal-center/my-profile");
-		}
 	};
 
 	const altView = useMemo(() => isWindowsOs() ? "Alt" : "⌥", [isWindowsOs]);
 	const items: MenuProps["items"] = [
-		{
-			label: t("common.menu.personalCenter"),
-			key: "personal-center",
-			icon: <RiAccountCircleLine />,
-			extra: `${altView}P`,
-		},
 		{
 			label: t("authority.logout"),
 			key: "logout",
@@ -46,10 +36,6 @@ export function UserMenu({ ...restProps }: ButtonProps) {
 			extra: `${altView}Q`,
 		},
 	];
-
-	useKeyPress(["alt.P"], () => {
-		navigate("/personal-center/my-profile");
-	});
 
 	useKeyPress(["alt.Q"], () => {
 		onClick({ key: "logout" } as any);
