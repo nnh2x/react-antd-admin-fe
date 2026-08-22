@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { matchRoutes, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
-import { fetchAsyncRoutes } from "#src/api/user";
 import { useCurrentRoute } from "#src/hooks/use-current-route";
+import { userRepository } from "#src/infrastructure/user";
 import { hideLoading } from "#src/plugins/hide-loading";
 import { setupLoading } from "#src/plugins/loading";
 import { exception403Path, exception404Path, exception500Path, loginPath } from "#src/router/extra-info";
@@ -68,7 +68,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 			 * If backend routing is enabled and the route is obtained from a separate interface, then initiate a request
 			 */
 			if (enableBackendAccess && isSendRoutingRequest) {
-				promises.push(fetchAsyncRoutes());
+				promises.push(userRepository.getAsyncRoutes());
 			}
 
 			const results = await Promise.allSettled(promises);

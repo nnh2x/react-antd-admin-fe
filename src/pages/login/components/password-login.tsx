@@ -1,4 +1,4 @@
-import type { LoginInfo } from "#src/api/user";
+import type { LoginInfo } from "#src/domain/user";
 
 import {
 	Button,

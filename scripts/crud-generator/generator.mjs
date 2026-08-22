@@ -25,6 +25,11 @@ function toPascalCase(value) {
 		.join("");
 }
 
+function toCamelCase(value) {
+	const pascal = toPascalCase(value);
+	return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+}
+
 function ensurePathSegment(value, property) {
 	if (typeof value !== "string" || !PATH_SEGMENT_PATTERN.test(value)) {
 		throw new Error(`${property} phải ở dạng kebab-case và không được chứa đường dẫn cha.`);
@@ -143,7 +148,13 @@ function typeForField(field) {
 	return "string";
 }
 
-function renderTypes(config) {
+// ---------------------------------------------------------------------------
+// Domain layer: entity types + repository interface. See
+// .claude/skills/clean-architecture/SKILL.md for the layering this generator
+// targets — domain has no dependency on infrastructure/application/presentation.
+// ---------------------------------------------------------------------------
+
+function renderEntity(config) {
 	const pascalName = toPascalCase(config.name);
 	const itemFields = [
 		`${config.idField}: ${config.idType}`,
@@ -154,22 +165,62 @@ function renderTypes(config) {
 	return `export interface ${pascalName}Item {\n${indent(itemFields.join("\n"))}\n}\n\nexport type Create${pascalName}Input = Pick<${pascalName}Item, ${formFieldNames}>;\n\nexport type Update${pascalName}Input = Create${pascalName}Input & Pick<${pascalName}Item, ${quote(config.idField)}>;\n\nexport interface ${pascalName}Query extends ApiTableRequest {\n${indent(config.fields.filter(field => field.search).map(field => `${field.name}?: ${typeForField(field)}`).join("\n"))}\n}\n`;
 }
 
-function renderApi(config) {
+function renderRepositoryInterface(config) {
 	const pascalName = toPascalCase(config.name);
-	return `import type {\n\tCreate${pascalName}Input,\n\t${pascalName}Item,\n\t${pascalName}Query,\n\tUpdate${pascalName}Input,\n} from "./types";\nimport { request } from "#src/utils/request";\n\nexport * from "./types";\n\nconst RESOURCE_URL = ${quote(config.endpoint)};\nconst resourceUrl = (id: ${pascalName}Item[${quote(config.idField)}]) => [RESOURCE_URL, encodeURIComponent(String(id))].join("/");\n\nexport function fetch${pascalName}List(data: ${pascalName}Query) {\n\treturn request.get<ApiListResponse<${pascalName}Item>>(RESOURCE_URL, { searchParams: data, ignoreLoading: true }).json();\n}\n\nexport function fetch${pascalName}Detail(id: ${pascalName}Item[${quote(config.idField)}]) {\n\treturn request.get<ApiResponse<${pascalName}Item>>(resourceUrl(id)).json();\n}\n\nexport function create${pascalName}(data: Create${pascalName}Input) {\n\treturn request.post<ApiResponse<${pascalName}Item>>(RESOURCE_URL, { json: data }).json();\n}\n\nexport function update${pascalName}(data: Update${pascalName}Input) {\n\treturn request.put<ApiResponse<${pascalName}Item>>(resourceUrl(data.${config.idField}), { json: data }).json();\n}\n\nexport function delete${pascalName}(id: ${pascalName}Item[${quote(config.idField)}]) {\n\treturn request.delete<ApiResponse<${pascalName}Item[${quote(config.idField)}]>>(resourceUrl(id)).json();\n}\n`;
+	return `import type { Create${pascalName}Input, Update${pascalName}Input, ${pascalName}Item, ${pascalName}Query } from "./${config.name}.entity";\n\nexport interface ${pascalName}Repository {\n\tlist: (params: ${pascalName}Query) => Promise<ApiListResponse<${pascalName}Item>>\n\tdetail: (id: ${pascalName}Item[${quote(config.idField)}]) => Promise<ApiResponse<${pascalName}Item>>\n\tcreate: (data: Create${pascalName}Input) => Promise<ApiResponse<${pascalName}Item>>\n\tupdate: (data: Update${pascalName}Input) => Promise<ApiResponse<${pascalName}Item>>\n\tremove: (id: ${pascalName}Item[${quote(config.idField)}]) => Promise<ApiResponse<${pascalName}Item[${quote(config.idField)}]>>\n}\n`;
 }
 
-function valueTypeForField(field) {
-	return {
-		text: "text",
-		textarea: "textarea",
-		number: "digit",
-		select: "select",
-		boolean: "switch",
-		date: "date",
-		datetime: "dateTime",
-	}[field.type];
+function renderDomainIndex(config) {
+	return `export * from "./${config.name}.entity";\nexport type * from "./${config.name}.repository";\n`;
 }
+
+// ---------------------------------------------------------------------------
+// Infrastructure layer: the one repository implementation, using the shared
+// `request` (ky) client — this is what used to be `src/api/**`.
+// ---------------------------------------------------------------------------
+
+function renderRepositoryImpl(config) {
+	const pascalName = toPascalCase(config.name);
+	const camelName = toCamelCase(config.name);
+	return `import type { Create${pascalName}Input, Update${pascalName}Input, ${pascalName}Item, ${pascalName}Repository } from "#src/domain/${config.module}/${config.name}";\nimport { request } from "#src/utils/request";\n\nconst RESOURCE_URL = ${quote(config.endpoint)};\nconst resourceUrl = (id: ${pascalName}Item[${quote(config.idField)}]) => [RESOURCE_URL, encodeURIComponent(String(id))].join("/");\n\nexport const ${camelName}Repository: ${pascalName}Repository = {\n\tlist: data => request.get<ApiListResponse<${pascalName}Item>>(RESOURCE_URL, { searchParams: data, ignoreLoading: true }).json(),\n\tdetail: id => request.get<ApiResponse<${pascalName}Item>>(resourceUrl(id)).json(),\n\tcreate: (data: Create${pascalName}Input) => request.post<ApiResponse<${pascalName}Item>>(RESOURCE_URL, { json: data }).json(),\n\tupdate: (data: Update${pascalName}Input) => request.put<ApiResponse<${pascalName}Item>>(resourceUrl(data.${config.idField}), { json: data }).json(),\n\tremove: id => request.delete<ApiResponse<${pascalName}Item[${quote(config.idField)}]>>(resourceUrl(id)).json(),\n};\n`;
+}
+
+function renderInfrastructureIndex(config) {
+	return `export * from "./${config.name}.repository";\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Application layer: the use-cases presentation is allowed to call. Owns all
+// useQuery/useMutation composition — pages/components never call the
+// repository directly.
+// ---------------------------------------------------------------------------
+
+function renderApplicationList(config) {
+	const pascalName = toPascalCase(config.name);
+	const camelName = toCamelCase(config.name);
+	return `import type { ${pascalName}Query } from "#src/domain/${config.module}/${config.name}";\nimport { ${camelName}Repository } from "#src/infrastructure/${config.module}/${config.name}";\n\n/** Used directly as \`BasicTable\`'s \`request\` prop. */\nexport async function list${pascalName}s(params: ${pascalName}Query) {\n\tconst responseData = await ${camelName}Repository.list(params);\n\treturn {\n\t\t...responseData,\n\t\tdata: responseData.result.list,\n\t\ttotal: responseData.result.total,\n\t};\n}\n`;
+}
+
+function renderApplicationDetail(config) {
+	const pascalName = toPascalCase(config.name);
+	const camelName = toCamelCase(config.name);
+	return `import type { ${pascalName}Item } from "#src/domain/${config.module}/${config.name}";\nimport { ${camelName}Repository } from "#src/infrastructure/${config.module}/${config.name}";\n\nexport async function get${pascalName}Detail(id: ${pascalName}Item[${quote(config.idField)}]) {\n\treturn ${camelName}Repository.detail(id);\n}\n`;
+}
+
+function renderApplicationMutations(config) {
+	const pascalName = toPascalCase(config.name);
+	const camelName = toCamelCase(config.name);
+	return `import { useMutation } from "@tanstack/react-query";\nimport { ${camelName}Repository } from "#src/infrastructure/${config.module}/${config.name}";\n\nexport function useCreate${pascalName}() {\n\treturn useMutation({ mutationFn: ${camelName}Repository.create });\n}\n\nexport function useUpdate${pascalName}() {\n\treturn useMutation({ mutationFn: ${camelName}Repository.update });\n}\n\nexport function useDelete${pascalName}() {\n\treturn useMutation({ mutationFn: ${camelName}Repository.remove });\n}\n`;
+}
+
+function renderApplicationIndex(config) {
+	return `export * from "./get-${config.name}-detail";\nexport * from "./list-${config.name}s";\nexport * from "./use-${config.name}-mutations";\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Presentation layer: page, table/detail column config, and drawer form.
+// Imports only from the application and domain layers above.
+// ---------------------------------------------------------------------------
 
 function renderValueEnum(field) {
 	if (field.type !== "select")
@@ -186,6 +237,18 @@ function renderDetailColumn(field) {
 	return `{\n\ttitle: ${quote(field.label)},\n\tdataIndex: ${quote(field.name)},\n\tvalueType: ${quote(valueTypeForField(field))},${renderValueEnum(field)}\n}`;
 }
 
+function valueTypeForField(field) {
+	return {
+		text: "text",
+		textarea: "textarea",
+		number: "digit",
+		select: "select",
+		boolean: "switch",
+		date: "date",
+		datetime: "dateTime",
+	}[field.type];
+}
+
 function renderConstants(config) {
 	const pascalName = toPascalCase(config.name);
 	const tableColumns = config.fields.filter(field => field.table).map(renderColumn);
@@ -194,7 +257,7 @@ function renderConstants(config) {
 		...config.fields.filter(field => field.detail),
 	].map(renderDetailColumn);
 
-	return `import type { ProColumns, ProDescriptionsItemProps } from "@ant-design/pro-components";\nimport type { ${pascalName}Item } from "#src/api/${config.module}/${config.name}";\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_TITLE = ${quote(config.title)};\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_COLUMNS: ProColumns<${pascalName}Item>[] = [\n\t{\n\t\ttitle: "STT",\n\t\tvalueType: "indexBorder",\n\t\twidth: 72,\n\t\tsearch: false,\n\t},\n${indent(tableColumns.map(column => `${column},`).join("\n"))}\n];\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_DETAIL_COLUMNS: ProDescriptionsItemProps<${pascalName}Item>[] = [\n${indent(detailFields.map(column => `${column},`).join("\n"))}\n];\n`;
+	return `import type { ProColumns, ProDescriptionsItemProps } from "@ant-design/pro-components";\nimport type { ${pascalName}Item } from "#src/domain/${config.module}/${config.name}";\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_TITLE = ${quote(config.title)};\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_COLUMNS: ProColumns<${pascalName}Item>[] = [\n\t{\n\t\ttitle: "STT",\n\t\tvalueType: "indexBorder",\n\t\twidth: 72,\n\t\tsearch: false,\n\t},\n${indent(tableColumns.map(column => `${column},`).join("\n"))}\n];\n\nexport const ${config.name.replaceAll("-", "_").toUpperCase()}_DETAIL_COLUMNS: ProDescriptionsItemProps<${pascalName}Item>[] = [\n${indent(detailFields.map(column => `${column},`).join("\n"))}\n];\n`;
 }
 
 function formComponentForField(field) {
@@ -228,21 +291,28 @@ function renderDrawer(config) {
 	const fieldMarkup = formFields.map(renderFormField).join("\n\n");
 	const constantPrefix = config.name.replaceAll("-", "_").toUpperCase();
 
-	return `import type { Create${pascalName}Input, ${pascalName}Item } from "#src/api/${config.module}/${config.name}";\nimport {\n\tDrawerForm,\n\tProDescriptions,\n${indent(formComponents.map(component => `${component},`).join("\n"))}\n} from "@ant-design/pro-components";\nimport { useMutation } from "@tanstack/react-query";\nimport { Drawer, Form } from "antd";\nimport { useEffect } from "react";\nimport { useTranslation } from "react-i18next";\nimport { create${pascalName}, update${pascalName} } from "#src/api/${config.module}/${config.name}";\n\nimport { ${constantPrefix}_DETAIL_COLUMNS, ${constantPrefix}_TITLE } from "../constants";\n\nexport type ${pascalName}DrawerMode = "create" | "edit" | "view";\n\ninterface ${pascalName}DrawerProps {\n\tmode: ${pascalName}DrawerMode\n\topen: boolean\n\tdetailData: Partial<${pascalName}Item>\n\tonClose: () => void\n\tonSuccess: () => void\n}\n\nexport function ${pascalName}Drawer({ mode, open, detailData, onClose, onSuccess }: ${pascalName}DrawerProps) {\n\tconst { t } = useTranslation();\n\tconst [form] = Form.useForm<Create${pascalName}Input>();\n\tconst createMutation = useMutation({ mutationFn: create${pascalName} });\n\tconst updateMutation = useMutation({ mutationFn: update${pascalName} });\n\tconst title = [\n\t\tmode === "create" ? t("common.add") : mode === "edit" ? t("common.update") : t("common.view"),\n\t\t${constantPrefix}_TITLE,\n\t].join(" ");\n\n\tuseEffect(() => {\n\t\tif (!open || mode === "view")\n\t\t\treturn;\n\t\tform.resetFields();\n\t\tform.setFieldsValue(detailData);\n\t}, [detailData, form, mode, open]);\n\n\tif (mode === "view") {\n\t\treturn (\n\t\t\t<Drawer title={title} open={open} width={640} onClose={onClose} destroyOnHidden>\n\t\t\t\t<ProDescriptions<${pascalName}Item>\n\t\t\t\t\tcolumn={1}\n\t\t\t\t\tcolumns={${constantPrefix}_DETAIL_COLUMNS}\n\t\t\t\t\tdataSource={detailData as ${pascalName}Item}\n\t\t\t\t/>\n\t\t\t</Drawer>\n\t\t);\n\t}\n\n\tconst onFinish = async (values: Create${pascalName}Input) => {\n\t\tif (mode === "edit") {\n\t\t\tconst recordId = detailData.${config.idField};\n\t\t\tif (recordId === undefined || recordId === null)\n\t\t\t\tthrow new Error("Không tìm thấy khóa chính của bản ghi.");\n\t\t\tawait updateMutation.mutateAsync({ ...values, ${config.idField}: recordId });\n\t\t\twindow.$message?.success(t("common.updateSuccess"));\n\t\t}\n\t\telse {\n\t\t\tawait createMutation.mutateAsync(values);\n\t\t\twindow.$message?.success(t("common.addSuccess"));\n\t\t}\n\t\tonSuccess();\n\t\treturn true;\n\t};\n\n\treturn (\n\t\t<DrawerForm<Create${pascalName}Input>\n\t\t\ttitle={title}\n\t\t\topen={open}\n\t\t\tform={form}\n\t\t\tinitialValues={{\n${indent(initialValues, 4)}\n\t\t\t}}\n\t\t\tdrawerProps={{ destroyOnHidden: true }}\n\t\t\tresize={{ minWidth: 480, maxWidth: window.innerWidth * 0.8 }}\n\t\t\tonOpenChange={visible => !visible && onClose()}\n\t\t\tonFinish={onFinish}\n\t\t>\n${indent(fieldMarkup, 3)}\n\t\t</DrawerForm>\n\t);\n}\n`;
+	return `import type { Create${pascalName}Input, ${pascalName}Item } from "#src/domain/${config.module}/${config.name}";\nimport {\n\tDrawerForm,\n\tProDescriptions,\n${indent(formComponents.map(component => `${component},`).join("\n"))}\n} from "@ant-design/pro-components";\nimport { Drawer, Form } from "antd";\nimport { useEffect } from "react";\nimport { useTranslation } from "react-i18next";\nimport { useCreate${pascalName}, useUpdate${pascalName} } from "#src/application/${config.module}/${config.name}";\n\nimport { ${constantPrefix}_DETAIL_COLUMNS, ${constantPrefix}_TITLE } from "../constants";\n\nexport type ${pascalName}DrawerMode = "create" | "edit" | "view";\n\ninterface ${pascalName}DrawerProps {\n\tmode: ${pascalName}DrawerMode\n\topen: boolean\n\tdetailData: Partial<${pascalName}Item>\n\tonClose: () => void\n\tonSuccess: () => void\n}\n\nexport function ${pascalName}Drawer({ mode, open, detailData, onClose, onSuccess }: ${pascalName}DrawerProps) {\n\tconst { t } = useTranslation();\n\tconst [form] = Form.useForm<Create${pascalName}Input>();\n\tconst createMutation = useCreate${pascalName}();\n\tconst updateMutation = useUpdate${pascalName}();\n\tconst title = [\n\t\tmode === "create" ? t("common.add") : mode === "edit" ? t("common.update") : t("common.view"),\n\t\t${constantPrefix}_TITLE,\n\t].join(" ");\n\n\tuseEffect(() => {\n\t\tif (!open || mode === "view")\n\t\t\treturn;\n\t\tform.resetFields();\n\t\tform.setFieldsValue(detailData);\n\t}, [detailData, form, mode, open]);\n\n\tif (mode === "view") {\n\t\treturn (\n\t\t\t<Drawer title={title} open={open} width={640} onClose={onClose} destroyOnHidden>\n\t\t\t\t<ProDescriptions<${pascalName}Item>\n\t\t\t\t\tcolumn={1}\n\t\t\t\t\tcolumns={${constantPrefix}_DETAIL_COLUMNS}\n\t\t\t\t\tdataSource={detailData as ${pascalName}Item}\n\t\t\t\t/>\n\t\t\t</Drawer>\n\t\t);\n\t}\n\n\tconst onFinish = async (values: Create${pascalName}Input) => {\n\t\tif (mode === "edit") {\n\t\t\tconst recordId = detailData.${config.idField};\n\t\t\tif (recordId === undefined || recordId === null)\n\t\t\t\tthrow new Error("Không tìm thấy khóa chính của bản ghi.");\n\t\t\tawait updateMutation.mutateAsync({ ...values, ${config.idField}: recordId });\n\t\t\twindow.$message?.success(t("common.updateSuccess"));\n\t\t}\n\t\telse {\n\t\t\tawait createMutation.mutateAsync(values);\n\t\t\twindow.$message?.success(t("common.addSuccess"));\n\t\t}\n\t\tonSuccess();\n\t\treturn true;\n\t};\n\n\treturn (\n\t\t<DrawerForm<Create${pascalName}Input>\n\t\t\ttitle={title}\n\t\t\topen={open}\n\t\t\tform={form}\n\t\t\tinitialValues={{\n${indent(initialValues, 4)}\n\t\t\t}}\n\t\t\tdrawerProps={{ destroyOnHidden: true }}\n\t\t\tresize={{ minWidth: 480, maxWidth: window.innerWidth * 0.8 }}\n\t\t\tonOpenChange={visible => !visible && onClose()}\n\t\t\tonFinish={onFinish}\n\t\t>\n${indent(fieldMarkup, 3)}\n\t\t</DrawerForm>\n\t);\n}\n`;
 }
 
 function renderPage(config) {
 	const pascalName = toPascalCase(config.name);
 	const constantPrefix = config.name.replaceAll("-", "_").toUpperCase();
-	return `import type { ActionType, ProColumns, ProCoreActionType } from "@ant-design/pro-components";\nimport type { ${pascalName}Item, ${pascalName}Query } from "#src/api/${config.module}/${config.name}";\nimport type { ${pascalName}DrawerMode } from "./components/${config.name}-drawer";\n\nimport { PlusCircleOutlined } from "@ant-design/icons";\nimport { useMutation } from "@tanstack/react-query";\nimport { Button, Popconfirm } from "antd";\nimport { useRef, useState } from "react";\nimport { useTranslation } from "react-i18next";\nimport { delete${pascalName}, fetch${pascalName}Detail, fetch${pascalName}List } from "#src/api/${config.module}/${config.name}";\nimport { BasicButton } from "#src/components/basic-button";\nimport { BasicContent } from "#src/components/basic-content";\nimport { BasicTable } from "#src/components/basic-table";\nimport { accessControlCodes, useAccess } from "#src/hooks/use-access";\n\nimport { ${pascalName}Drawer } from "./components/${config.name}-drawer";\nimport { ${constantPrefix}_COLUMNS, ${constantPrefix}_TITLE } from "./constants";\n\nexport default function ${pascalName}Page() {\n\tconst { t } = useTranslation();\n\tconst { hasAccessByCodes } = useAccess();\n\tconst actionRef = useRef<ActionType>(null);\n\tconst [drawerOpen, setDrawerOpen] = useState(false);\n\tconst [drawerMode, setDrawerMode] = useState<${pascalName}DrawerMode>("view");\n\tconst [detailData, setDetailData] = useState<Partial<${pascalName}Item>>({});\n\tconst deleteMutation = useMutation({ mutationFn: delete${pascalName} });\n\n\tconst closeDrawer = () => {\n\t\tsetDrawerOpen(false);\n\t\tsetDetailData({});\n\t};\n\n\tconst openDrawer = async (mode: ${pascalName}DrawerMode, record?: ${pascalName}Item) => {\n\t\tsetDrawerMode(mode);\n\t\tif (mode === "create") {\n\t\t\tsetDetailData({});\n\t\t}\n\t\telse if (record) {\n\t\t\tconst response = await fetch${pascalName}Detail(record.${config.idField});\n\t\t\tsetDetailData(response.result);\n\t\t}\n\t\tsetDrawerOpen(true);\n\t};\n\n\tconst handleDelete = async (record: ${pascalName}Item, action?: ProCoreActionType<object>) => {\n\t\tawait deleteMutation.mutateAsync(record.${config.idField});\n\t\twindow.$message?.success(t("common.deleteSuccess"));\n\t\tawait action?.reload?.();\n\t};\n\n\tconst columns: ProColumns<${pascalName}Item>[] = [\n\t\t...${constantPrefix}_COLUMNS,\n\t\t{\n\t\t\ttitle: t("common.action"),\n\t\t\tvalueType: "option",\n\t\t\tkey: "actions",\n\t\t\tsearch: false,\n\t\t\tfixed: "right",\n\t\t\twidth: 180,\n\t\t\trender: (_, record, __, action) => [\n\t\t\t\t<BasicButton key="view" type="link" size="small" onClick={() => openDrawer("view", record)}>\n\t\t\t\t\t{t("common.view")}\n\t\t\t\t</BasicButton>,\n\t\t\t\t<BasicButton\n\t\t\t\t\tkey="edit"\n\t\t\t\t\ttype="link"\n\t\t\t\t\tsize="small"\n\t\t\t\t\tdisabled={!hasAccessByCodes(accessControlCodes.update)}\n\t\t\t\t\tonClick={() => openDrawer("edit", record)}\n\t\t\t\t>\n\t\t\t\t\t{t("common.edit")}\n\t\t\t\t</BasicButton>,\n\t\t\t\t<Popconfirm\n\t\t\t\t\tkey="delete"\n\t\t\t\t\ttitle={t("common.confirmDelete")}\n\t\t\t\t\tokText={t("common.confirm")}\n\t\t\t\t\tcancelText={t("common.cancel")}\n\t\t\t\t\tonConfirm={() => handleDelete(record, action)}\n\t\t\t\t>\n\t\t\t\t\t<BasicButton type="link" size="small" disabled={!hasAccessByCodes(accessControlCodes.delete)}>\n\t\t\t\t\t\t{t("common.delete")}\n\t\t\t\t\t</BasicButton>\n\t\t\t\t</Popconfirm>,\n\t\t\t],\n\t\t},\n\t];\n\n\treturn (\n\t\t<BasicContent className="h-full">\n\t\t\t<BasicTable<${pascalName}Item, ${pascalName}Query>\n\t\t\t\tadaptive\n\t\t\t\tactionRef={actionRef}\n\t\t\t\tcolumns={columns}\n\t\t\t\tcolumnsState={{\n\t\t\t\t\tpersistenceKey: ${quote(`${config.module}-${config.name}-columns`)},\n\t\t\t\t\tpersistenceType: "localStorage",\n\t\t\t\t}}\n\t\t\t\theaderTitle={${constantPrefix}_TITLE}\n\t\t\t\trequest={async (params) => {\n\t\t\t\t\tconst response = await fetch${pascalName}List(params);\n\t\t\t\t\treturn {\n\t\t\t\t\t\tdata: response.result.list,\n\t\t\t\t\t\ttotal: response.result.total,\n\t\t\t\t\t\tsuccess: response.success,\n\t\t\t\t\t};\n\t\t\t\t}}\n\t\t\t\ttoolBarRender={() => [\n\t\t\t\t\t<Button\n\t\t\t\t\t\tkey="create"\n\t\t\t\t\t\ttype="primary"\n\t\t\t\t\t\ticon={<PlusCircleOutlined />}\n\t\t\t\t\t\tdisabled={!hasAccessByCodes(accessControlCodes.add)}\n\t\t\t\t\t\tonClick={() => openDrawer("create")}\n\t\t\t\t\t>\n\t\t\t\t\t\t{t("common.add")}\n\t\t\t\t\t</Button>,\n\t\t\t\t]}\n\t\t\t/>\n\t\t\t<${pascalName}Drawer\n\t\t\t\tmode={drawerMode}\n\t\t\t\topen={drawerOpen}\n\t\t\t\tdetailData={detailData}\n\t\t\t\tonClose={closeDrawer}\n\t\t\t\tonSuccess={() => {\n\t\t\t\t\tcloseDrawer();\n\t\t\t\t\tactionRef.current?.reload();\n\t\t\t\t}}\n\t\t\t/>\n\t\t</BasicContent>\n\t);\n}\n`;
+	return `import type { ActionType, ProColumns, ProCoreActionType } from "@ant-design/pro-components";\nimport type { ${pascalName}Item, ${pascalName}Query } from "#src/domain/${config.module}/${config.name}";\nimport type { ${pascalName}DrawerMode } from "./components/${config.name}-drawer";\n\nimport { PlusCircleOutlined } from "@ant-design/icons";\nimport { Button, Popconfirm } from "antd";\nimport { useRef, useState } from "react";\nimport { useTranslation } from "react-i18next";\nimport { get${pascalName}Detail, list${pascalName}s, useDelete${pascalName} } from "#src/application/${config.module}/${config.name}";\nimport { BasicButton } from "#src/components/basic-button";\nimport { BasicContent } from "#src/components/basic-content";\nimport { BasicTable } from "#src/components/basic-table";\nimport { accessControlCodes, useAccess } from "#src/hooks/use-access";\n\nimport { ${pascalName}Drawer } from "./components/${config.name}-drawer";\nimport { ${constantPrefix}_COLUMNS, ${constantPrefix}_TITLE } from "./constants";\n\nexport default function ${pascalName}Page() {\n\tconst { t } = useTranslation();\n\tconst { hasAccessByCodes } = useAccess();\n\tconst actionRef = useRef<ActionType>(null);\n\tconst [drawerOpen, setDrawerOpen] = useState(false);\n\tconst [drawerMode, setDrawerMode] = useState<${pascalName}DrawerMode>("view");\n\tconst [detailData, setDetailData] = useState<Partial<${pascalName}Item>>({});\n\tconst deleteMutation = useDelete${pascalName}();\n\n\tconst closeDrawer = () => {\n\t\tsetDrawerOpen(false);\n\t\tsetDetailData({});\n\t};\n\n\tconst openDrawer = async (mode: ${pascalName}DrawerMode, record?: ${pascalName}Item) => {\n\t\tsetDrawerMode(mode);\n\t\tif (mode === "create") {\n\t\t\tsetDetailData({});\n\t\t}\n\t\telse if (record) {\n\t\t\tconst response = await get${pascalName}Detail(record.${config.idField});\n\t\t\tsetDetailData(response.result);\n\t\t}\n\t\tsetDrawerOpen(true);\n\t};\n\n\tconst handleDelete = async (record: ${pascalName}Item, action?: ProCoreActionType<object>) => {\n\t\tawait deleteMutation.mutateAsync(record.${config.idField});\n\t\twindow.$message?.success(t("common.deleteSuccess"));\n\t\tawait action?.reload?.();\n\t};\n\n\tconst columns: ProColumns<${pascalName}Item>[] = [\n\t\t...${constantPrefix}_COLUMNS,\n\t\t{\n\t\t\ttitle: t("common.action"),\n\t\t\tvalueType: "option",\n\t\t\tkey: "actions",\n\t\t\tsearch: false,\n\t\t\tfixed: "right",\n\t\t\twidth: 180,\n\t\t\trender: (_, record, __, action) => [\n\t\t\t\t<BasicButton key="view" type="link" size="small" onClick={() => openDrawer("view", record)}>\n\t\t\t\t\t{t("common.view")}\n\t\t\t\t</BasicButton>,\n\t\t\t\t<BasicButton\n\t\t\t\t\tkey="edit"\n\t\t\t\t\ttype="link"\n\t\t\t\t\tsize="small"\n\t\t\t\t\tdisabled={!hasAccessByCodes(accessControlCodes.update)}\n\t\t\t\t\tonClick={() => openDrawer("edit", record)}\n\t\t\t\t>\n\t\t\t\t\t{t("common.edit")}\n\t\t\t\t</BasicButton>,\n\t\t\t\t<Popconfirm\n\t\t\t\t\tkey="delete"\n\t\t\t\t\ttitle={t("common.confirmDelete")}\n\t\t\t\t\tokText={t("common.confirm")}\n\t\t\t\t\tcancelText={t("common.cancel")}\n\t\t\t\t\tonConfirm={() => handleDelete(record, action)}\n\t\t\t\t>\n\t\t\t\t\t<BasicButton type="link" size="small" disabled={!hasAccessByCodes(accessControlCodes.delete)}>\n\t\t\t\t\t\t{t("common.delete")}\n\t\t\t\t\t</BasicButton>\n\t\t\t\t</Popconfirm>,\n\t\t\t],\n\t\t},\n\t];\n\n\treturn (\n\t\t<BasicContent className="h-full">\n\t\t\t<BasicTable<${pascalName}Item, ${pascalName}Query>\n\t\t\t\tadaptive\n\t\t\t\tactionRef={actionRef}\n\t\t\t\tcolumns={columns}\n\t\t\t\tcolumnsState={{\n\t\t\t\t\tpersistenceKey: ${quote(`${config.module}-${config.name}-columns`)},\n\t\t\t\t\tpersistenceType: "localStorage",\n\t\t\t\t}}\n\t\t\t\theaderTitle={${constantPrefix}_TITLE}\n\t\t\t\trequest={list${pascalName}s}\n\t\t\t\ttoolBarRender={() => [\n\t\t\t\t\t<Button\n\t\t\t\t\t\tkey="create"\n\t\t\t\t\t\ttype="primary"\n\t\t\t\t\t\ticon={<PlusCircleOutlined />}\n\t\t\t\t\t\tdisabled={!hasAccessByCodes(accessControlCodes.add)}\n\t\t\t\t\t\tonClick={() => openDrawer("create")}\n\t\t\t\t\t>\n\t\t\t\t\t\t{t("common.add")}\n\t\t\t\t\t</Button>,\n\t\t\t\t]}\n\t\t\t/>\n\t\t\t<${pascalName}Drawer\n\t\t\t\tmode={drawerMode}\n\t\t\t\topen={drawerOpen}\n\t\t\t\tdetailData={detailData}\n\t\t\t\tonClose={closeDrawer}\n\t\t\t\tonSuccess={() => {\n\t\t\t\t\tcloseDrawer();\n\t\t\t\t\tactionRef.current?.reload();\n\t\t\t\t}}\n\t\t\t/>\n\t\t</BasicContent>\n\t);\n}\n`;
 }
 
 export function generateCrud(rawConfig, options = {}) {
 	const config = normalizeConfig(rawConfig);
 	const outputRoot = path.resolve(options.outputRoot ?? process.cwd());
 	const files = [
-		{ relativePath: `src/api/${config.module}/${config.name}/types.ts`, content: renderTypes(config) },
-		{ relativePath: `src/api/${config.module}/${config.name}/index.ts`, content: renderApi(config) },
+		{ relativePath: `src/domain/${config.module}/${config.name}/${config.name}.entity.ts`, content: renderEntity(config) },
+		{ relativePath: `src/domain/${config.module}/${config.name}/${config.name}.repository.ts`, content: renderRepositoryInterface(config) },
+		{ relativePath: `src/domain/${config.module}/${config.name}/index.ts`, content: renderDomainIndex(config) },
+		{ relativePath: `src/infrastructure/${config.module}/${config.name}/${config.name}.repository.ts`, content: renderRepositoryImpl(config) },
+		{ relativePath: `src/infrastructure/${config.module}/${config.name}/index.ts`, content: renderInfrastructureIndex(config) },
+		{ relativePath: `src/application/${config.module}/${config.name}/list-${config.name}s.ts`, content: renderApplicationList(config) },
+		{ relativePath: `src/application/${config.module}/${config.name}/get-${config.name}-detail.ts`, content: renderApplicationDetail(config) },
+		{ relativePath: `src/application/${config.module}/${config.name}/use-${config.name}-mutations.ts`, content: renderApplicationMutations(config) },
+		{ relativePath: `src/application/${config.module}/${config.name}/index.ts`, content: renderApplicationIndex(config) },
 		{ relativePath: `src/pages/${config.module}/${config.name}/constants.ts`, content: renderConstants(config) },
 		{ relativePath: `src/pages/${config.module}/${config.name}/components/${config.name}-drawer.tsx`, content: renderDrawer(config) },
 		{ relativePath: `src/pages/${config.module}/${config.name}/index.tsx`, content: renderPage(config) },
@@ -326,7 +396,7 @@ export function parseArguments(args) {
 }
 
 export function printHelp() {
-	console.log(`Tạo module CRUD theo convention của React Antd Admin.
+	console.log(`Tạo module CRUD theo convention của React Antd Admin (clean architecture: domain / infrastructure / application / presentation — xem .claude/skills/clean-architecture/SKILL.md).
 
 Cách dùng:
   yarn generate:crud

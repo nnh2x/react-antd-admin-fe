@@ -1,11 +1,15 @@
 # CRUD generator
 
-CLI sinh một module quản trị hoàn chỉnh theo convention hiện tại của dự án:
+CLI sinh một module quản trị hoàn chỉnh theo kiến trúc clean architecture của
+dự án (domain / infrastructure / application / presentation — xem
+`.claude/skills/clean-architecture/SKILL.md`):
 
 - `BasicTable` có phân trang, search theo field và lưu cấu hình cột.
 - Drawer thêm mới/cập nhật với validation.
 - Drawer xem chi tiết và thao tác xóa có xác nhận.
-- TypeScript types và REST API dùng request client chung.
+- Entity + repository interface (domain), repository implementation dùng
+  request client chung (infrastructure), use-case hooks/functions
+  (application) — trang chỉ import từ hai layer domain và application.
 - Kiểm tra file tồn tại trước khi ghi.
 
 ## Chạy nhanh
@@ -28,7 +32,24 @@ Kiểm tra trước mà không tạo file:
 yarn generate:crud --config scripts/crud-generator/example.json --dry-run
 ```
 
-CLI sinh năm file trong `src/api/<module>/<name>` và `src/pages/<module>/<name>`. Sau đó chỉ cần lazy import page mới vào module router phù hợp. CLI cố ý không tự sửa router vì cấu trúc menu, icon, role và permission là quyết định riêng của từng màn hình.
+CLI sinh 12 file, trải đều bốn layer:
+
+```text
+src/domain/<module>/<name>/<name>.entity.ts        # entity + Create/Update/Query types
+src/domain/<module>/<name>/<name>.repository.ts    # repository interface (port)
+src/domain/<module>/<name>/index.ts
+src/infrastructure/<module>/<name>/<name>.repository.ts  # implementation dùng `request`
+src/infrastructure/<module>/<name>/index.ts
+src/application/<module>/<name>/list-<name>s.ts     # dùng làm `request` prop của BasicTable
+src/application/<module>/<name>/get-<name>-detail.ts
+src/application/<module>/<name>/use-<name>-mutations.ts  # useCreate/useUpdate/useDelete
+src/application/<module>/<name>/index.ts
+src/pages/<module>/<name>/constants.ts
+src/pages/<module>/<name>/components/<name>-drawer.tsx
+src/pages/<module>/<name>/index.tsx
+```
+
+Sau đó chỉ cần lazy import page mới vào module router phù hợp. CLI cố ý không tự sửa router vì cấu trúc menu, icon, role và permission là quyết định riêng của từng màn hình.
 
 ## Schema
 

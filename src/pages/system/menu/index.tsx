@@ -1,17 +1,16 @@
 import type { ActionType, ProColumns, ProCoreActionType } from "@ant-design/pro-components";
-import type { MenuItemType } from "#src/api/system/menu";
+import type { MenuItemType } from "#src/domain/system/menu";
 
 import { PlusCircleOutlined } from "@ant-design/icons";
 import { Button, Popconfirm } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchDeleteMenuItem, fetchMenuList } from "#src/api/system/menu";
+import { listMenus, useDeleteMenu } from "#src/application/system/menu";
 import { BasicButton } from "#src/components/basic-button";
 
 import { BasicContent } from "#src/components/basic-content";
 import { BasicTable } from "#src/components/basic-table";
 import { accessControlCodes, useAccess } from "#src/hooks/use-access";
-import { handleTree } from "#src/utils/tree";
 
 import { Detail } from "./components/detail";
 import { getConstantColumns } from "./constants";
@@ -19,6 +18,7 @@ import { getConstantColumns } from "./constants";
 export default function Menu() {
 	const { t } = useTranslation();
 	const { hasAccessByCodes } = useAccess();
+	const deleteMenuMutation = useDeleteMenu();
 	/* Detail Data */
 	const [isOpen, setIsOpen] = useState(false);
 	const [title, setTitle] = useState("");
@@ -28,7 +28,7 @@ export default function Menu() {
 	const actionRef = useRef<ActionType>(null);
 
 	const handleDeleteRow = async (id: number, action?: ProCoreActionType<object>) => {
-		const responseData = await fetchDeleteMenuItem(id);
+		const responseData = await deleteMenuMutation.mutateAsync(id);
 		await action?.reload?.();
 		window.$message?.success(`${t("common.deleteSuccess")} id = ${responseData.result}`);
 	};
@@ -86,20 +86,11 @@ export default function Menu() {
 				columns={columns}
 				actionRef={actionRef}
 				request={async (params) => {
-					// console.log(sort, filter);
-					const responseData = await fetchMenuList(params);
-					const menuTree = handleTree(responseData.result.list);
+					const result = await listMenus(params);
 					setFlatParentMenus(
-						responseData.result.list
-							.filter(
-								item => Number(item.menuType) === 0,
-							).map(item => ({ ...item, name: t(item.name) })),
+						result.parentMenuCandidates.map(item => ({ ...item, name: t(item.name) })),
 					);
-					return {
-						...responseData,
-						data: menuTree,
-						total: responseData.result.total,
-					};
+					return result;
 				}}
 				headerTitle={`${t("common.menu.menu")} （${t("common.demoOnly")}）`}
 				toolBarRender={() => [

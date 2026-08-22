@@ -1,17 +1,16 @@
-import type { RoleItemType } from "#src/api/system/role";
 import type { TreeDataNodeWithId } from "#src/components/basic-form";
+import type { RoleItemType } from "#src/domain/system/role";
 import {
 	DrawerForm,
 	ProFormRadio,
 	ProFormText,
 	ProFormTextArea,
 } from "@ant-design/pro-components";
-import { useMutation } from "@tanstack/react-query";
 
 import { Form } from "antd";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchAddRoleItem, fetchUpdateRoleItem } from "#src/api/system/role";
+import { useCreateRole, useUpdateRole } from "#src/application/system/role";
 import { FormTreeItem } from "#src/components/basic-form";
 
 interface DetailProps {
@@ -27,12 +26,8 @@ export function Detail({ title, open, onCloseChange, detailData, treeData, refre
 	const { t } = useTranslation();
 	const [form] = Form.useForm<RoleItemType>();
 
-	const addRoleItemMutation = useMutation({
-		mutationFn: fetchAddRoleItem,
-	});
-	const updateRoleItemMutation = useMutation({
-		mutationFn: fetchUpdateRoleItem,
-	});
+	const addRoleItemMutation = useCreateRole();
+	const updateRoleItemMutation = useUpdateRole();
 
 	const onFinish = async (values: RoleItemType) => {
 		// console.info(values);

@@ -27,3 +27,8 @@ export interface AuthListProps {
 	name: string
 	auth: string[]
 }
+
+export interface RefreshTokenResult {
+	token: string
+	refreshToken: string
+}

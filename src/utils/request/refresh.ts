@@ -1,7 +1,7 @@
 import type { KyResponse, Options } from "ky";
 import ky from "ky";
 
-import { fetchRefreshToken } from "#src/api/user";
+import { userRepository } from "#src/infrastructure/user";
 import { useAuthStore } from "#src/store/auth";
 import { AUTH_HEADER } from "./constants";
 import { goLogin } from "./go-login";
@@ -21,8 +21,8 @@ export async function refreshTokenAndRetry(request: Request, options: Options, r
 	if (!isRefreshing) {
 		isRefreshing = true;
 		try {
-			// Call fetchRefreshToken with the given refreshToken to get a new token and refreshToken
-			const freshResponse = await fetchRefreshToken({ refreshToken });
+			// Call refreshToken with the given refreshToken to get a new token and refreshToken
+			const freshResponse = await userRepository.refreshToken({ refreshToken });
 			// Extract the new token from the response
 			const newToken = freshResponse.result.token;
 			// Extract the new refreshToken from the response

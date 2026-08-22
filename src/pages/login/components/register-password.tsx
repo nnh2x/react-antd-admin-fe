@@ -6,10 +6,11 @@ import {
 	Space,
 	Typography,
 } from "antd";
-import { use, useState } from "react";
+import { use } from "react";
 
 import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router";
+import { useRegister } from "#src/application/user";
 import { BasicButton } from "#src/components/basic-button";
 
 import { PASSWORD_RULES, USERNAME_RULES } from "#src/constants/rules";
@@ -25,12 +26,13 @@ const FORM_INITIAL_VALUES = {
 export type RegisterPasswordFormType = typeof FORM_INITIAL_VALUES;
 
 export function RegisterPassword() {
-	const [loading] = useState(false);
 	const [registerForm] = Form.useForm();
 	const { t } = useTranslation();
 	const { setFormMode } = use(FormModeContext);
+	const registerMutation = useRegister();
 
-	const handleFinish = async () => {
+	const handleFinish = async (values: RegisterPasswordFormType) => {
+		await registerMutation.mutateAsync(values);
 		window.$message?.success("Registration successful");
 	};
 
@@ -116,7 +118,7 @@ export function RegisterPassword() {
 				</Form.Item>
 
 				<Form.Item>
-					<Button block type="primary" htmlType="submit" loading={loading}>
+					<Button block type="primary" htmlType="submit" loading={registerMutation.isPending}>
 						{t("authority.register")}
 					</Button>
 				</Form.Item>

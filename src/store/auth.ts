@@ -1,8 +1,8 @@
-import type { AuthType, LoginInfo } from "#src/api/user/types";
+import type { AuthType, LoginInfo } from "#src/domain/user";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { fetchLogin, fetchLogout } from "#src/api/user";
+import { userRepository } from "#src/infrastructure/user";
 import { useAccessStore } from "#src/store/access";
 import { useTabsStore } from "#src/store/tabs";
 
@@ -28,7 +28,7 @@ export const useAuthStore = create<AuthState & AuthAction>()(
 		...initialState,
 
 		login: async (loginPayload) => {
-			const response = await fetchLogin(loginPayload);
+			const response = await userRepository.login(loginPayload);
 			set({
 				...response.result,
 			});
@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthState & AuthAction>()(
 			 * 1. Log out
 			 */
 
-			await fetchLogout();
+			await userRepository.logout();
 			/**
 			 * 2. Clear token and other information
 			 */

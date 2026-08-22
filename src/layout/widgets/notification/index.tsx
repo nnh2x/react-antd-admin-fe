@@ -1,5 +1,5 @@
 import type { ButtonProps } from "antd";
-import type { NotificationItem } from "./types";
+import type { NotificationItem } from "#src/domain/notifications";
 
 import { BellOutlined } from "@ant-design/icons";
 import { useToggle } from "ahooks";

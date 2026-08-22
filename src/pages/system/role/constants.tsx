@@ -1,10 +1,10 @@
-import type { ProColumns } from "@ant-design/pro-components";
 import type { TFunction } from "i18next";
-import type { RoleItemType } from "#src/api/system/role";
+import type { BasicTableColumn } from "#src/components/basic-table";
+import type { RoleItemType } from "#src/domain/system/role";
 
-import { Tag } from "antd";
+import { Select, Tag } from "antd";
 
-export function getConstantColumns(t: TFunction<"translation", undefined>): ProColumns<RoleItemType>[] {
+export function getConstantColumns(t: TFunction<"translation", undefined>): BasicTableColumn<RoleItemType>[] {
 	return [
 		{
 			dataIndex: "index",
@@ -16,6 +16,7 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 			title: t("system.role.name"),
 			dataIndex: "name",
 			ellipsis: true,
+			headerSearch: true,
 			formItemProps: {
 				rules: [
 					{
@@ -32,6 +33,7 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 			filters: true,
 			onFilter: true,
 			ellipsis: true,
+			headerSearch: true,
 		},
 		{
 			title: t("common.status"),
@@ -50,6 +52,22 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 					text: t("common.deactivated"),
 				},
 			},
+			headerSearch: {
+				render: (value, onChange) => (
+					<Select
+						size="small"
+						allowClear
+						value={value || undefined}
+						placeholder={t("common.search")}
+						onClick={event => event.stopPropagation()}
+						onChange={next => onChange(next ?? "")}
+						options={[
+							{ label: t("common.enabled"), value: "1" },
+							{ label: t("common.deactivated"), value: "0" },
+						]}
+					/>
+				),
+			},
 		},
 		{
 			title: t("common.remark"),
@@ -57,6 +75,7 @@ export function getConstantColumns(t: TFunction<"translation", undefined>): ProC
 			width: 220,
 			ellipsis: true,
 			search: false,
+			headerSearch: true,
 		},
 		{
 			title: t("common.createTime"),

@@ -1,6 +1,6 @@
 import type { ProColumns } from "@ant-design/pro-components";
 import type { TFunction } from "i18next";
-import type { MenuItemType } from "#src/api/system/menu";
+import type { MenuItemType } from "#src/domain/system/menu";
 
 import { Tag } from "antd";
 

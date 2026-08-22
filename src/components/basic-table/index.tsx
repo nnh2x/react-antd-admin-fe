@@ -446,7 +446,10 @@ export function BasicTable<
 				nextColumn.title = ((...args: any[]) => {
 					const titleNode = typeof originalTitle === "function" ? (originalTitle as (...args: any[]) => React.ReactNode)(...args) : originalTitle;
 					return (
-						<div className="flex flex-col gap-1">
+						// The resize handle is an absolutely-positioned strip pinned to this cell's right
+						// edge (see ResizableTitle) — without this gutter, a full-width search input/select
+						// sits flush against that edge and swallows the drag before it reaches the handle.
+						<div className={cn("flex flex-col gap-1", columnResizable && "pr-5")}>
 							<div>{titleNode}</div>
 							<HeaderSearchInput
 								value={headerSearchValuesRef.current[key]}

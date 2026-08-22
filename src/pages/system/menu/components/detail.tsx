@@ -1,4 +1,4 @@
-import type { MenuItemType } from "#src/api/system/menu";
+import type { MenuItemType } from "#src/domain/system/menu";
 import {
 	ModalForm,
 	ProFormCascader,
@@ -11,7 +11,7 @@ import { Form } from "antd";
 
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchAddMenuItem, fetchUpdateMenuItem } from "#src/api/system/menu";
+import { useCreateMenu, useUpdateMenu } from "#src/application/system/menu";
 import { handleTree } from "#src/utils/tree";
 
 import { getMenuTypeOptions } from "../constants";
@@ -36,15 +36,18 @@ export function Detail({
 	const { t } = useTranslation();
 	const [form] = Form.useForm<MenuItemType>();
 
+	const createMenuMutation = useCreateMenu();
+	const updateMenuMutation = useUpdateMenu();
+
 	const onFinish = async (values: MenuItemType) => {
 		// console.info(values);
 		/* Update if there is an id, otherwise create a new one */
 		if (detailData.id) {
-			await fetchUpdateMenuItem(values);
+			await updateMenuMutation.mutateAsync(values);
 			window.$message?.success(t("common.updateSuccess"));
 		}
 		else {
-			await fetchAddMenuItem(values);
+			await createMenuMutation.mutateAsync(values);
 			window.$message?.success(t("common.addSuccess"));
 		}
 		/* Refresh the table */
