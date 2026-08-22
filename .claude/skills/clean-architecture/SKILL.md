@@ -80,11 +80,14 @@ a plain presentation component. (Examples in this repo: `system/dept`,
 ## Adding a new CRUD module
 
 Prefer the generator — it emits all four layers already wired to this
-convention:
+convention, plus a router module (glob-loaded, no manual registration) and
+`vi-VN`/`en-US` locale namespaces, so the page is reachable from the menu in
+both languages as soon as the command finishes:
 
 ```
-yarn generate:crud
-# or: yarn generate:crud --config path/to/config.json
+yarn generate:crud <name> --module=<module> --title="<title>" --title-en="<title>"   # quick: code/name/description fields
+yarn generate:crud --config path/to/config.json                                       # full control over fields
+yarn generate:crud                                                                     # interactive, asks per field
 ```
 
 See `scripts/crud-generator/README.md` for the config shape. If you're adding

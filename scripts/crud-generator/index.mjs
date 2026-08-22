@@ -4,6 +4,7 @@ import process from "node:process";
 import { createInterface } from "node:readline/promises";
 
 import {
+	buildQuickConfig,
 	generateCrud,
 	loadConfig,
 	parseArguments,
@@ -127,8 +128,10 @@ async function main() {
 
 	const rawConfig = options.config
 		? await loadConfig(options.config)
-		: await collectInteractiveConfig();
-	const generated = generateCrud(rawConfig, { outputRoot: options.outputRoot });
+		: options.name
+			? buildQuickConfig(options)
+			: await collectInteractiveConfig();
+	const generated = await generateCrud(rawConfig, { outputRoot: options.outputRoot });
 	await writeGeneratedFiles(generated, { dryRun: options.dryRun, force: options.force });
 
 	const action = options.dryRun ? "Sẽ tạo" : "Đã tạo";
