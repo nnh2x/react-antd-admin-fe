@@ -10,6 +10,7 @@ import {
 } from "antd";
 import { use, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useForgotPassword } from "#src/application/user";
 import { BasicButton } from "#src/components/basic-button";
 import { FormModeContext } from "../form-mode-context";
 
@@ -30,17 +31,14 @@ export function ForgotPassword() {
 		},
 	});
 
-	const [loading, setLoading] = useState(false);
 	const [forgotForm] = Form.useForm();
 	const { t } = useTranslation();
 	const { setFormMode } = use(FormModeContext);
+	const forgotPasswordMutation = useForgotPassword();
 
-	const handleFinish = async () => {
-		setLoading(true);
+	const handleFinish = async (values: ForgotPasswordFormType) => {
+		await forgotPasswordMutation.mutateAsync(values);
 		setTargetDate(Date.now() + 1000 * 30);
-		setTimeout(() => {
-			setLoading(false);
-		}, 1000);
 	};
 
 	return (
@@ -82,7 +80,7 @@ export function ForgotPassword() {
 						block
 						type="primary"
 						htmlType="submit"
-						loading={loading}
+						loading={forgotPasswordMutation.isPending}
 						disabled={countdown > 0}
 					>
 						{countdown > 0

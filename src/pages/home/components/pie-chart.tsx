@@ -1,18 +1,17 @@
 import type { EChartsOption } from "echarts";
-import type { PieDataType } from "#src/api/home";
 import { Card, Segmented } from "antd";
 import ReactECharts from "echarts-for-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useTranslation } from "react-i18next";
-import { fetchPie } from "#src/api/home";
+import { usePieChartData } from "#src/application/home";
 
 export default function PieChart() {
 	const { t } = useTranslation();
-	const [data, setData] = useState<PieDataType[]>([]);
 	const [value, setValue] = useState<string | number>(
 		t("home.allChannels"),
 	);
+	const { data: pieData = [] } = usePieChartData(value);
 
 	const DATA_KEY = {
 		electronics: t("home.electronics"),
@@ -21,6 +20,14 @@ export default function PieChart() {
 		food_beverages: t("home.foodBeverages"),
 		beauty_skincare: t("home.beautySkincare"),
 	};
+
+	const data = pieData.map((item) => {
+		const code = item.code as keyof typeof DATA_KEY;
+		return {
+			...item,
+			name: DATA_KEY[code],
+		};
+	});
 
 	const option: EChartsOption = {
 		title: {
@@ -53,22 +60,6 @@ export default function PieChart() {
 			},
 		],
 	};
-
-	useEffect(() => {
-		if (value) {
-			fetchPie({ by: value }).then(({ result }) => {
-				setData(
-					result.map((item) => {
-						const code = item.code as keyof typeof DATA_KEY;
-						return {
-							...item,
-							name: DATA_KEY[code],
-						};
-					}),
-				);
-			});
-		}
-	}, [value]);
 
 	return (
 		<Card

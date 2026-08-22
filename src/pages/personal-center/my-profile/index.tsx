@@ -1,3 +1,4 @@
+import type { UserInfoType } from "#src/domain/user";
 import { MailOutlined, PhoneOutlined, UserOutlined } from "@ant-design/icons";
 import {
 	ProForm,
@@ -5,6 +6,7 @@ import {
 	ProFormTextArea,
 } from "@ant-design/pro-components";
 import { Card, Col, Form, Row, theme, Typography } from "antd";
+import { useUpdateProfile } from "#src/application/user";
 import { BasicContent } from "#src/components/basic-content";
 
 import { FormAvatarItem } from "#src/components/basic-form";
@@ -16,8 +18,10 @@ export default function Profile() {
 	const currentUser = useUserStore();
 	const avatar = currentUser.avatar || "https://avatar.vercel.sh/blur.svg?text=2";
 	const { token } = theme.useToken();
+	const updateProfileMutation = useUpdateProfile();
 
-	const handleFinish = async () => {
+	const handleFinish = async (values: Partial<UserInfoType>) => {
+		await updateProfileMutation.mutateAsync(values);
 		window.$message?.success("Basic information updated successfully");
 	};
 

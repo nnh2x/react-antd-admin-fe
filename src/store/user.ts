@@ -1,7 +1,7 @@
-import type { UserInfoType } from "#src/api/user/types";
+import type { UserInfoType } from "#src/domain/user";
 import { create } from "zustand";
 
-import { fetchUserInfo } from "#src/api/user";
+import { userRepository } from "#src/infrastructure/user";
 
 const initialState = {
 	id: "",
@@ -27,7 +27,7 @@ export const useUserStore = create<UserState & UserAction>()(
 		...initialState,
 
 		getUserInfo: async () => {
-			const response = await fetchUserInfo();
+			const response = await userRepository.getUserInfo();
 			set({
 				...response.result,
 			});

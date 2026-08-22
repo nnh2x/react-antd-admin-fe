@@ -10,6 +10,7 @@ import {
 } from "antd";
 import { use, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSendLoginCode } from "#src/application/user";
 import { BasicButton } from "#src/components/basic-button";
 import { MOBILE_PHONE_RULES } from "#src/constants/rules";
 
@@ -28,6 +29,7 @@ export function CodeLogin() {
 	const [codeLoginForm] = Form.useForm();
 	const { t } = useTranslation();
 	const { setFormMode } = use(FormModeContext);
+	const sendLoginCodeMutation = useSendLoginCode();
 
 	const handleFinish = async () => {
 		setLoading(true);
@@ -67,11 +69,9 @@ export function CodeLogin() {
 					captchaTextRender={(timing, count) => {
 						return timing ? t("authority.sendText", { second: count }) : t("authority.sendCode");
 					}}
-					// onGetCaptcha={(phone) => {
-					onGetCaptcha={() => {
-						// console.log("phoneNumber:", phone);
+					onGetCaptcha={async (phoneNumber) => {
+						await sendLoginCodeMutation.mutateAsync({ phoneNumber });
 						window.$message?.success(t("common.success"));
-						return Promise.resolve();
 					}}
 					// onTiming={(count) => {
 					// 	console.log("timing:", count);

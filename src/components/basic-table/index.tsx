@@ -96,23 +96,47 @@ interface ResizableTitleProps extends ThHTMLAttributes<HTMLTableCellElement> {
 	width?: number
 	resizable?: boolean
 	onResize?: (width: number) => void
+	headerSearch?: boolean | BasicTableHeaderSearchConfig
+	headerSearchValue?: string
+	onHeaderSearchChange?: (value: string | undefined) => void
 }
 
 /**
  * Header `<th>` replacement that wraps the cell in `react-resizable`'s `Resizable` so its right
  * edge can be dragged to resize the column. `width` must be a concrete number for this to attach
  * (see `DEFAULT_COLUMN_WIDTH` in `mergeColumns`, which guarantees one for every resizable column).
+ *
+ * Also renders the `headerSearch` input (if any) below `children` here, at the render-component
+ * level — NOT by overriding `column.title` in `mergeColumns`. ProTable reuses `column.title` for
+ * more than the header cell (e.g. as the field label in its own collapsible search form above the
+ * table), so folding the search input into `title` leaked it into that unrelated form too.
  */
 function ResizableTitle(props: ResizableTitleProps) {
-	const { width, resizable, onResize, className, ...restProps } = props;
+	const { width, resizable, onResize, headerSearch, headerSearchValue, onHeaderSearchChange, className, children, ...restProps } = props;
+	const { t } = useTranslation();
 	const [dragging, setDragging] = useState(false);
 	// Offset (px) of the live drag position from the column's committed width, used only to move
 	// the ghost line — never fed back into React state mid-drag (see handleResizeStop for why).
 	const [liveOffset, setLiveOffset] = useState(0);
 	const latestWidthRef = useRef<number>(width ?? MIN_COLUMN_WIDTH);
 
+	const content = headerSearch
+		? (
+	// See the resize handle's comment below for why resizable columns need this gutter.
+			<div className={cn("flex flex-col gap-1", resizable && width && "pr-5")}>
+				<div>{children}</div>
+				<HeaderSearchInput
+					value={headerSearchValue}
+					config={isObject(headerSearch) ? headerSearch : undefined}
+					placeholder={t("common.search")}
+					onChange={value => onHeaderSearchChange?.(value)}
+				/>
+			</div>
+		)
+		: children;
+
 	if (!resizable || !width) {
-		return <th className={className} {...restProps} />;
+		return <th className={className} {...restProps}>{content}</th>;
 	}
 
 	// Every column's width lives in the parent's `columnWidths` state, so committing on each
@@ -168,7 +192,7 @@ function ResizableTitle(props: ResizableTitleProps) {
 				</span>
 			)}
 		>
-			<th className={cn(className, "relative")} {...restProps} />
+			<th className={cn(className, "relative")} {...restProps}>{content}</th>
 		</Resizable>
 	);
 }
@@ -402,8 +426,8 @@ export function BasicTable<
 		onHeaderSearchChange?.(headerSearchValues);
 	}, [headerSearchValues, onHeaderSearchChange]);
 
-	// Read via ref (not the `mergeColumns` dependency array) inside the title closure below, so
-	// typing in a header-search box doesn't force every column to be rebuilt on each debounced
+	// Read via ref (not the `mergeColumns` dependency array) inside the onHeaderCell closure below,
+	// so typing in a header-search box doesn't force every column to be rebuilt on each debounced
 	// commit — antd/rc-table remounts the whole header row whenever the `columns` array it's given
 	// changes identity, which would otherwise blow away input focus after every commit.
 	const headerSearchValuesRef = useRef(headerSearchValues);
@@ -425,9 +449,12 @@ export function BasicTable<
 			// Resizing needs a concrete pixel width to drag from, so resizable columns that don't
 			// declare one fall back to a default instead of staying content-sized.
 			const width = columnWidths[key] ?? column.width ?? (columnResizable ? DEFAULT_COLUMN_WIDTH : undefined);
-			const originalTitle = column.title;
 
-			const nextColumn = {
+			// `column.title` is intentionally left untouched here — ProTable reuses it as the field
+			// label in its own search form above the table, not just for the header cell, so
+			// `headerSearch` is rendered by `ResizableTitle` instead (via onHeaderCell) rather than by
+			// wrapping `title`. See the comment on `ResizableTitle`.
+			return {
 				...column,
 				children,
 				width,
@@ -438,30 +465,13 @@ export function BasicTable<
 					onResize: (nextWidth: number) => {
 						setColumnWidths(prev => ({ ...prev, [key]: nextWidth }));
 					},
+					headerSearch: column.headerSearch,
+					headerSearchValue: headerSearchValuesRef.current[key],
+					onHeaderSearchChange: (value: string | undefined) => handleHeaderSearchChange(key, value),
 				}),
 			} as ProColumns<DataType, ValueType>;
-
-			if (column.headerSearch) {
-				const searchConfig = isObject(column.headerSearch) ? column.headerSearch : undefined;
-				nextColumn.title = ((...args: any[]) => {
-					const titleNode = typeof originalTitle === "function" ? (originalTitle as (...args: any[]) => React.ReactNode)(...args) : originalTitle;
-					return (
-						<div className="flex flex-col gap-1">
-							<div>{titleNode}</div>
-							<HeaderSearchInput
-								value={headerSearchValuesRef.current[key]}
-								config={searchConfig}
-								placeholder={t("common.search")}
-								onChange={value => handleHeaderSearchChange(key, value)}
-							/>
-						</div>
-					);
-				}) as typeof nextColumn.title;
-			}
-
-			return nextColumn;
 		});
-	}, [resizable, columnWidths, t, handleHeaderSearchChange]);
+	}, [resizable, columnWidths, handleHeaderSearchChange]);
 
 	const mergedColumns = useMemo(
 		() => (props.columns ? mergeColumns(props.columns) : props.columns),

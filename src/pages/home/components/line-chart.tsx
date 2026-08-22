@@ -1,16 +1,16 @@
 import type { EChartsOption } from "echarts";
 import { Card, Radio } from "antd";
 import ReactECharts from "echarts-for-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchLine } from "#src/api/home";
+import { useLineChartData } from "#src/application/home";
 
 export default function LineChart() {
 	const { t } = useTranslation();
 	const [value, setValue] = useState("week");
 
-	const [data, setData] = useState<string[]>([]);
+	const { data = [] } = useLineChartData(value);
 
 	const DATA_KEYS = {
 		week: [
@@ -51,14 +51,6 @@ export default function LineChart() {
 			},
 		],
 	};
-
-	useEffect(() => {
-		if (value) {
-			fetchLine({ range: value }).then(({ result }) => {
-				setData(result);
-			});
-		}
-	}, [value]);
 
 	return (
 		<Card

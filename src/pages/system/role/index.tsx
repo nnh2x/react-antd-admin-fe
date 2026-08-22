@@ -1,12 +1,11 @@
 import type { ActionType, ProColumns, ProCoreActionType } from "@ant-design/pro-components";
-import type { RoleItemType } from "#src/api/system/role";
+import type { RoleItemType } from "#src/domain/system/role";
 
 import { PlusCircleOutlined } from "@ant-design/icons";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Popconfirm } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchDeleteRoleItem, fetchMenuByRoleId, fetchRoleList, fetchRoleMenu } from "#src/api/system/role";
+import { getRoleMenuIds, listRoles, useDeleteRole, useRoleMenuTree } from "#src/application/system/role";
 
 import { BasicButton } from "#src/components/basic-button";
 import { BasicContent } from "#src/components/basic-content";
@@ -20,21 +19,8 @@ import { getConstantColumns } from "./constants";
 export default function Role() {
 	const { t } = useTranslation();
 	const { hasAccessByCodes } = useAccess();
-	const { data: menuItems } = useQuery({
-		queryKey: ["role-menu"],
-		queryFn: async () => {
-			const responseData = await fetchRoleMenu();
-			return responseData?.result.map(item => ({
-				...item,
-				title: item.name,
-				key: item.id,
-			}));
-		},
-		initialData: [],
-	});
-	const deleteRoleItemMutation = useMutation({
-		mutationFn: fetchDeleteRoleItem,
-	});
+	const { data: menuItems } = useRoleMenuTree();
+	const deleteRoleMutation = useDeleteRole();
 	/* Detail Data */
 	const [isOpen, setIsOpen] = useState(false);
 	const [title, setTitle] = useState("");
@@ -44,7 +30,7 @@ export default function Role() {
 	const actionRef = useRef<ActionType>(null);
 
 	const handleDeleteRow = async (id: number, action?: ProCoreActionType<object>) => {
-		const responseData = await deleteRoleItemMutation.mutateAsync(id);
+		const responseData = await deleteRoleMutation.mutateAsync(id);
 		await action?.reload?.();
 		window.$message?.success(`${t("common.deleteSuccess")} id = ${responseData.result}`);
 	};
@@ -78,7 +64,7 @@ export default function Role() {
 						disabled={!hasAccessByCodes(accessControlCodes.update)}
 						onClick={async () => {
 							/* Fetch the role's menu permissions */
-							const responseData = await fetchMenuByRoleId({ id: record.id });
+							const responseData = await getRoleMenuIds(record.id);
 							setIsOpen(true);
 							setTitle(t("system.role.editRole"));
 							setDetailData({ ...record, menus: responseData.result });
@@ -120,20 +106,12 @@ export default function Role() {
 				dataSource={tableData}
 				dragSortKey="sort"
 				onDataSourceChange={setTableData}
-				onDragSortEnd={(_, __, dataSource) => {
+				onDragSortEnd={(x, y, dataSource) => {
 					setTableData(dataSource);
 					window.$message?.success(t("system.role.dragSortSuccess"));
 				}}
 				actionRef={actionRef}
-				request={async (params) => {
-					// console.log(sort, filter);
-					const responseData = await fetchRoleList(params);
-					return {
-						...responseData,
-						data: responseData.result.list,
-						total: responseData.result.total,
-					};
-				}}
+				request={listRoles}
 				headerTitle={`${t("common.menu.role")} （${t("common.demoOnly")}）`}
 				toolBarRender={() => [
 					<Button
